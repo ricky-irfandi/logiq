@@ -1,0 +1,31 @@
+# Build + tooling
+build/
+.dart_tool/
+.packages
+.pub/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Logs / temp
+*.log
+*.tmp
+
+# Coverage / reports
+test/
+coverage/
+test_results/
+lcov.info
+
+# Example app (if you don't want to publish it)
+example/
+
+# Local scripts/tools (if any)
+tool/
+scripts/
