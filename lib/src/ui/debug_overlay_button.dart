@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../config/debug_viewer_config.dart';
 import '../core/logiq.dart';
 
 /// Floating debug button overlay.
@@ -7,13 +8,18 @@ class DebugOverlayButton {
   static OverlayEntry? _overlayEntry;
 
   /// Show the debug button.
-  static void show(BuildContext context) {
+  static void show(
+    BuildContext context, {
+    FloatingButtonPosition position = FloatingButtonPosition.bottomRight,
+  }) {
     if (_overlayEntry != null) return;
 
     _overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
-        right: 16,
-        bottom: 100,
+        left: _horizontal(position) == _Horizontal.left ? 16 : null,
+        right: _horizontal(position) == _Horizontal.right ? 16 : null,
+        top: _vertical(position) == _Vertical.top ? 100 : null,
+        bottom: _vertical(position) == _Vertical.bottom ? 100 : null,
         child: Material(
           color: Colors.transparent,
           child: InkWell(
@@ -51,4 +57,30 @@ class DebugOverlayButton {
     _overlayEntry?.remove();
     _overlayEntry = null;
   }
+
+  static _Horizontal _horizontal(FloatingButtonPosition position) {
+    switch (position) {
+      case FloatingButtonPosition.topLeft:
+      case FloatingButtonPosition.bottomLeft:
+        return _Horizontal.left;
+      case FloatingButtonPosition.topRight:
+      case FloatingButtonPosition.bottomRight:
+        return _Horizontal.right;
+    }
+  }
+
+  static _Vertical _vertical(FloatingButtonPosition position) {
+    switch (position) {
+      case FloatingButtonPosition.topLeft:
+      case FloatingButtonPosition.topRight:
+        return _Vertical.top;
+      case FloatingButtonPosition.bottomLeft:
+      case FloatingButtonPosition.bottomRight:
+        return _Vertical.bottom;
+    }
+  }
 }
+
+enum _Horizontal { left, right }
+
+enum _Vertical { top, bottom }

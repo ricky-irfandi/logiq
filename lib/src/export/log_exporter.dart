@@ -119,8 +119,13 @@ class LogExporter {
         logsContent.writeln();
       }
 
-      // Create export file
-      final tempDir = await getTemporaryDirectory();
+      // Create export file (fallback to system temp if plugin unavailable)
+      Directory tempDir;
+      try {
+        tempDir = await getTemporaryDirectory();
+      } catch (_) {
+        tempDir = Directory.systemTemp;
+      }
       final timestamp = DateTime.now()
           .toIso8601String()
           .replaceAll(':', '-')

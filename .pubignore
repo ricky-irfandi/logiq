@@ -32,6 +32,7 @@ example/macos/
 example/linux/
 example/web/
 example/windows/
+snapshot/
 
 # Local scripts/tools (if any)
 tool/

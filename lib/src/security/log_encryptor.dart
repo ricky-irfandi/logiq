@@ -71,31 +71,36 @@ class LogEncryptor {
       throw ArgumentError('Invalid encrypted data');
     }
 
-    final iv = data.sublist(0, _ivLength);
-    final ciphertext = data.sublist(_ivLength);
+    try {
+      final iv = data.sublist(0, _ivLength);
+      final ciphertext = data.sublist(_ivLength);
 
-    // Reuse cipher, reinitialize with IV from data
-    _cipher.init(
-      false, // decrypt
-      AEADParameters(
-        KeyParameter(_keyBytes),
-        _tagLength * 8,
-        iv,
-        Uint8List.fromList([]),
-      ),
-    );
+      // Reuse cipher, reinitialize with IV from data
+      _cipher.init(
+        false, // decrypt
+        AEADParameters(
+          KeyParameter(_keyBytes),
+          _tagLength * 8,
+          iv,
+          Uint8List.fromList([]),
+        ),
+      );
 
-    final plaintext = Uint8List(ciphertext.length - _tagLength);
-    final len = _cipher.processBytes(
-      ciphertext,
-      0,
-      ciphertext.length,
-      plaintext,
-      0,
-    );
-    _cipher.doFinal(plaintext, len);
+      final plaintext = Uint8List(ciphertext.length - _tagLength);
+      final len = _cipher.processBytes(
+        ciphertext,
+        0,
+        ciphertext.length,
+        plaintext,
+        0,
+      );
+      _cipher.doFinal(plaintext, len);
 
-    return utf8.decode(plaintext);
+      return utf8.decode(plaintext);
+    } on InvalidCipherTextException catch (e) {
+      // Normalize error type for callers/tests
+      throw ArgumentError('Invalid encrypted data: ${e.message}');
+    }
   }
 
   Uint8List _generateIv() {

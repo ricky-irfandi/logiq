@@ -95,6 +95,27 @@ void main() {
         expect(Logiq.config.minLevel, LogLevel.info);
         expect(Logiq.config.debugViewer.enabled, isFalse);
       });
+
+      test('should initialize even after implicit instance creation', () async {
+        // Access logger before explicit init (creates implicit instance)
+        Logiq.v('TEST', 'pre-init');
+
+        await Logiq.init(
+          config: LogConfig(
+            directory: logDirectory,
+            minLevel: LogLevel.verbose,
+          ),
+        );
+
+        expect(Logiq.logDirectory, logDirectory);
+
+        Logiq.i('TEST', 'post-init');
+        await Logiq.flush();
+
+        final content =
+            await TestHelpers.readLogFile('$logDirectory/current.log');
+        expect(content, logContains('post-init'));
+      });
     });
 
     group('logging methods', () {
@@ -811,6 +832,29 @@ void main() {
         await Logiq.clearOlderThan(const Duration(days: 7));
 
         expect(await oldFile.exists(), isFalse);
+      });
+
+      test('should honor minEntries when clearing old logs', () async {
+        final recentFile = File('$logDirectory/recent.log');
+        await recentFile.create(recursive: true);
+        await recentFile.writeAsString('recent\nsecond\n');
+
+        final oldFile = File('$logDirectory/old.log');
+        await oldFile.create(recursive: true);
+        await oldFile.writeAsString('old\nolder\n');
+        await oldFile.setLastModified(
+          DateTime.now().subtract(const Duration(days: 30)),
+        );
+
+        // Total entries = 4, minEntries = 3 -> should keep at least one file
+        await Logiq.clearOlderThan(
+          const Duration(days: 7),
+          minEntries: 3,
+        );
+
+        expect(await recentFile.exists(), isTrue);
+        // Old file should remain to satisfy minEntries
+        expect(await oldFile.exists(), isTrue);
       });
 
       test('should preserve recent logs when clearing old', () async {

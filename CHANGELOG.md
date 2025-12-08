@@ -1,4 +1,11 @@
-## 1.0.0-beta
+## 1.0.0-beta.2
+
+* Fixed deprecated `withOpacity` warning with compatibility extension for Flutter 3.24+
+* Updated `share_plus` integration to v11.x API (`SharePlus.instance.share()`)
+* Improved code quality and analysis compliance
+* Minor performance improvements in log viewer
+
+## 1.0.0-beta.1
 
 * Debug UI redesign
 * Added Light/Dark theme toggle and smooth transitions

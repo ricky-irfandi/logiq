@@ -31,7 +31,7 @@ import '../ui/debug_overlay_button.dart';
 /// - 🛡️ **PII Redaction**: Built-in patterns for emails, phones, SSNs, etc.
 /// - 🎨 **Debug UI**: Beautiful real-time log viewer with search & filters
 /// - 📊 **Statistics**: Track logged, dropped, and failed entries
-/// - 🌐 **Cross-platform**: Works on iOS, Android, Web, Desktop
+/// - 🌐 **Cross-platform**: Works on iOS, Android, macOS, Windows, Linux
 ///
 /// ## Quick Start
 ///
@@ -191,13 +191,13 @@ class Logiq {
   static Logiq? _instance;
   static Logiq get _i {
     if (_instance == null) {
-      // Auto-initialize with safe defaults to prevent crashes
-      // File operations will be deferred until init() is called
+      // Auto-initialize with safe defaults but defer any file IO until init().
       _instance = Logiq._();
       _instance!._config = LogConfig.auto();
       _instance!._sessionId = _generateSessionId();
       _instance!._enabled = true;
       _instance!._logDirectory = ''; // Will be set properly in init()
+      _instance!._initialized = false;
 
       if (kDebugMode) {
         debugPrint(
@@ -220,6 +220,7 @@ class Logiq {
   bool _enabled = true;
   LogLevel? _runtimeMinLevel;
   bool _sensitiveMode = false;
+  bool _initialized = false;
 
   // Stats
   int _totalLogged = 0;
@@ -291,10 +292,24 @@ class Logiq {
   static Future<void> init({LogConfig? config}) async {
     // Use lock to prevent race condition from concurrent init() calls
     await _initLock.synchronized(() async {
-      if (_instance != null) return; // Already initialized
+      // If already initialized, treat as no-op (idempotent)
+      if (_instance != null && _instance!._initialized) {
+        return;
+      }
 
-      // Create instance and use local variable to avoid multiple null checks
-      final instance = Logiq._();
+      // Reuse existing instance if present, but reset state for init.
+      final instance = _instance ?? Logiq._();
+      instance._flushTimer?.cancel();
+      instance._cleanupTimer?.cancel();
+      instance._buffer.clear();
+      instance._runtimeMinLevel = null;
+      instance._sensitiveMode = false;
+      instance._totalLogged = 0;
+      instance._droppedCount = 0;
+      instance._writeFailures = 0;
+      instance._sequenceNumber = 0;
+      instance._initialized = false;
+
       instance._config = config ?? LogConfig.auto();
       instance._sessionId = _generateSessionId();
       instance._enabled = instance._config.enabled;
@@ -303,12 +318,28 @@ class Logiq {
       if (instance._config.directory != null) {
         instance._logDirectory = instance._config.directory!;
       } else {
-        final appDir = await getApplicationDocumentsDirectory();
-        instance._logDirectory = '${appDir.path}/logiq';
+        try {
+          final appDir = await getApplicationDocumentsDirectory();
+          instance._logDirectory = '${appDir.path}/logiq';
+        } catch (_) {
+          // Fallback for test/VM environments without path_provider bindings
+          instance._logDirectory = '${Directory.systemTemp.path}/logiq';
+        }
       }
 
       // Ensure directory exists
-      await Directory(instance._logDirectory).create(recursive: true);
+      try {
+        await Directory(instance._logDirectory).create(recursive: true);
+      } catch (e, stackTrace) {
+        // Notify via hook and continue in in-memory mode
+        instance._logDirectory = '';
+        instance._initialized = true;
+        _instance = instance;
+        try {
+          instance._config.hooks?.onError?.call(e, stackTrace);
+        } catch (_) {}
+        return;
+      }
 
       // Start flush timer
       instance._startFlushTimer();
@@ -318,6 +349,7 @@ class Logiq {
         instance._scheduleCleanup();
       }
 
+      instance._initialized = true;
       // Set the static instance last to ensure it's fully initialized
       _instance = instance;
     });
@@ -728,15 +760,25 @@ class Logiq {
     if (_buffer.isEmpty) return;
 
     // Skip file operations if not properly initialized
-    if (_logDirectory.isEmpty) {
+    if (!_initialized || _logDirectory.isEmpty) {
       // Logs buffered in memory only until init() is called
       return;
     }
 
-    // Take current buffer snapshot (don't clear yet for data safety)
+    // Take snapshot and clear buffer up front to avoid losing new arrivals
     final entries = List<LogEntry>.from(_buffer);
+    _buffer.clear();
 
     try {
+      // Ensure directory still exists (in case it was removed between writes)
+      try {
+        await Directory(_logDirectory).create(recursive: true);
+      } catch (_) {
+        // If we can't create the directory, restore entries and bail
+        _buffer.addAll(entries);
+        return;
+      }
+
       // Build write params
       final allRedactionPatterns = [
         ..._config.redactionPatterns,
@@ -750,10 +792,16 @@ class Logiq {
       );
 
       // Write in isolate - NON-BLOCKING
-      await compute(FileWriter.writeEntries, params.toMap());
-
-      // SUCCESS! Only now clear the buffer
-      _buffer.clear();
+      bool rotated;
+      try {
+        rotated = await compute<Map<String, dynamic>, bool>(
+          FileWriter.writeEntries,
+          params.toMap(),
+        );
+      } catch (_) {
+        // Fallback for environments where compute/isolate is unavailable
+        rotated = await FileWriter.writeEntries(params.toMap());
+      }
 
       // Call hooks
       try {
@@ -763,9 +811,22 @@ class Logiq {
           debugPrint('Logiq: onFlush hook error: $e\n$stackTrace');
         }
       }
+      if (rotated) {
+        try {
+          _config.hooks?.onRotate?.call();
+        } catch (e, stackTrace) {
+          if (kDebugMode) {
+            debugPrint('Logiq: onRotate hook error: $e\n$stackTrace');
+          }
+        }
+      }
     } catch (e, stackTrace) {
       _writeFailures++;
-      // Data NOT lost - remains in buffer for retry on next flush
+      // Restore entries so they can be retried on next flush (preserve order)
+      for (var i = entries.length - 1; i >= 0; i--) {
+        _buffer.addFirst(entries[i]);
+      }
+
       if (kDebugMode) {
         debugPrint('Logiq: Flush error: $e\n$stackTrace');
       }
@@ -940,30 +1001,79 @@ class Logiq {
     }
   }
 
-  /// Clear logs older than [age].
-  static Future<void> clearOlderThan(Duration age) async {
+  /// Clear logs older than [age], keeping at least [minEntries] if provided.
+  static Future<void> clearOlderThan(Duration age, {int? minEntries}) async {
     final cutoff = DateTime.now().subtract(age);
     final dir = Directory(_i._logDirectory);
 
     if (await dir.exists()) {
+      // Collect file stats first
+      final files = <File>[];
+      final stats = <File, FileStat>{};
       try {
         await for (final file in dir.list()) {
           if (file is File && file.path.endsWith('.log')) {
-            try {
-              final stat = await file.stat();
-              if (stat.modified.isBefore(cutoff)) {
-                await file.delete();
-              }
-            } catch (e, stackTrace) {
-              if (kDebugMode) {
-                debugPrint('Logiq: File stat/delete error: $e\n$stackTrace');
-              }
-            }
+            files.add(file);
+            stats[file] = await file.stat();
           }
         }
       } catch (e, stackTrace) {
         if (kDebugMode) {
           debugPrint('Logiq: Directory listing error: $e\n$stackTrace');
+        }
+        return;
+      }
+
+      // Fast path: no minEntries requirement
+      if (minEntries == null || minEntries <= 0) {
+        for (final file in files) {
+          final stat = stats[file]!;
+          if (stat.modified.isBefore(cutoff)) {
+            try {
+              await file.delete();
+            } catch (e, stackTrace) {
+              if (kDebugMode) {
+                debugPrint('Logiq: File deletion error: $e\n$stackTrace');
+              }
+            }
+          }
+        }
+        return;
+      }
+
+      // Count entries per file to honor minEntries
+      final fileInfos = <_LogFileInfo>[];
+      var totalEntries = 0;
+      for (final file in files) {
+        final stat = stats[file]!;
+        int entryCount = 0;
+        try {
+          final content = await file.readAsString();
+          entryCount =
+              content.split('\n').where((line) => line.trim().isNotEmpty).length;
+        } catch (_) {
+          entryCount = 0;
+        }
+        totalEntries += entryCount;
+        fileInfos.add(_LogFileInfo(file: file, stat: stat, entryCount: entryCount));
+      }
+
+      // Sort oldest first
+      fileInfos.sort((a, b) => a.stat.modified.compareTo(b.stat.modified));
+
+      for (final info in fileInfos) {
+        if (!info.stat.modified.isBefore(cutoff)) continue;
+        if (totalEntries - info.entryCount < minEntries) {
+          // Stop once deleting would violate minEntries
+          break;
+        }
+        try {
+          await info.file.delete();
+          totalEntries -= info.entryCount;
+        } catch (e, stackTrace) {
+          if (kDebugMode) {
+            debugPrint('Logiq: File deletion error: $e\n$stackTrace');
+          }
         }
       }
     }
@@ -1181,8 +1291,12 @@ class Logiq {
   /// - [hideDebugButton] to remove the button
   /// - [openViewer] to open viewer directly
   static void showDebugButton(BuildContext context) {
-    if (!_i._config.debugViewer.enabled) return;
-    DebugOverlayButton.show(context);
+    final viewerConfig = _i._config.debugViewer;
+    if (!viewerConfig.enabled || !viewerConfig.showFloatingButton) return;
+    DebugOverlayButton.show(
+      context,
+      position: viewerConfig.floatingButtonPosition,
+    );
   }
 
   /// Hides the floating debug button.
@@ -1286,7 +1400,10 @@ class Logiq {
     if (_config.retention == null) return;
 
     try {
-      await clearOlderThan(_config.retention!.maxAge);
+      await clearOlderThan(
+        _config.retention!.maxAge,
+        minEntries: _config.retention!.minEntries,
+      );
     } catch (e, stackTrace) {
       if (kDebugMode) {
         debugPrint('Logiq: Cleanup error: $e\n$stackTrace');
@@ -1311,4 +1428,16 @@ class Logiq {
       }
     }
   }
+}
+
+class _LogFileInfo {
+  const _LogFileInfo({
+    required this.file,
+    required this.stat,
+    required this.entryCount,
+  });
+
+  final File file;
+  final FileStat stat;
+  final int entryCount;
 }

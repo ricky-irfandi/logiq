@@ -119,6 +119,9 @@ class RedactionPattern {
         email,
         creditCard,
         phone,
+        phoneIndonesia,
         ipAddress,
+        jwtToken,
+        nopolIndonesia,
       ];
 }

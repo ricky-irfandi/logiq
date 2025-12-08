@@ -723,9 +723,11 @@ class _LogViewerScreenState extends State<LogViewerScreen>
               child: const Text('Share'),
               onPressed: () async {
                 Navigator.of(context).pop();
-                await Share.shareXFiles(
-                  [XFile(exportResult.file.path)],
-                  subject: 'Logiq Export',
+                await SharePlus.instance.share(
+                  ShareParams(
+                    files: [XFile(exportResult.file.path)],
+                    subject: 'Logiq Export',
+                  ),
                 );
               },
             ),

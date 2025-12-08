@@ -7,6 +7,12 @@
 
 Logiq is an enterprise-grade logging solution designed for Flutter apps with a focus on **zero UI impact**. All heavy operations are offloaded to isolates, ensuring your logging never blocks the main thread.
 
+## 🎬 Demo
+
+![Logiq Demo](https://raw.githubusercontent.com/ricky-irfandi/logiq/main/snapshot/demo.gif)
+
+*Beautiful log viewer with light/dark themes, real-time filtering, search, and native share integration*
+
 ## ✨ Features
 
 - **⚡ Zero Impact** - Log calls return instantly (~0.001ms), heavy work happens in isolates
@@ -37,7 +43,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  logiq: ^1.0.0
+  logiq: ^1.0.0-beta.2
 ```
 
 ### Basic Usage
@@ -174,15 +180,8 @@ format: FormatConfig.custom((entry) =>
 
 ```dart
 config: LogConfig(
-  redactionPatterns: [
-    RedactionPattern.email,          // Redacts email addresses
-    RedactionPattern.phone,          // Redacts phone numbers
-    RedactionPattern.phoneIndonesia, // Indonesian phone numbers
-    RedactionPattern.creditCard,     // Credit card numbers
-    RedactionPattern.ipAddress,      // IP addresses
-    RedactionPattern.jwtToken,       // JWT tokens
-    RedactionPattern.nopolIndonesia, // Indonesian vehicle plates
-  ],
+  // Defaults include email, phone (intl + ID), credit card, IP, JWT, nopol
+  redactionPatterns: RedactionPattern.defaults,
 )
 ```
 
@@ -217,7 +216,7 @@ import 'dart:typed_data';
 // With key provider (recommended)
 encryption: EncryptionConfig.aes256(
   keyProvider: () async {
-    // Key provider must return Uint8List
+    // Key provider must return Uint8List; keep this fast to avoid blocking flush
     final keyString = await secureStorage.read(key: 'log_key');
     return Uint8List.fromList(utf8.encode(keyString));
   },
@@ -239,9 +238,9 @@ final secureKey = EncryptionConfig.generateKey(); // Returns Uint8List
 ```dart
 rotation: RotationConfig.multiFile(
   maxFileSize: 2 * 1024 * 1024, // 2MB
-  maxFiles: 3,                   // Keep 3 backups
+  maxFiles: 3,                   // Keep 3 backup files plus current
 )
-// Result: current.log → backup_1.log → backup_2.log → backup_3.log → deleted
+// Result: current.log → backup_1.log → backup_2.log → backup_3.log → backup_4.log deleted
 ```
 
 ### Single-File Rotation
@@ -341,6 +340,7 @@ final result = await Logiq.export(
   compress: true,                        // GZip compression
   includeDeviceInfo: true,               // Add device metadata
 );
+// Exports are limited to 50MB uncompressed to protect low-memory devices
 ```
 
 ## 📈 Statistics

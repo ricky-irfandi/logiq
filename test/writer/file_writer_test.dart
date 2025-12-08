@@ -538,10 +538,12 @@ void main() {
         // Should have at most maxFiles (3) backup files
         final backup1 = File('$logDirectory/backup_1.log');
         final backup2 = File('$logDirectory/backup_2.log');
+        final backup3 = File('$logDirectory/backup_3.log');
         final backup4 = File('$logDirectory/backup_4.log');
 
         expect(await backup1.exists(), isTrue);
         expect(await backup2.exists(), isTrue);
+        expect(await backup3.exists(), isTrue);
 
         // backup_4 should not exist (maxFiles = 3)
         expect(await backup4.exists(), isFalse);

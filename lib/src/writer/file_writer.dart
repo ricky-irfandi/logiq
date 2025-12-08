@@ -16,9 +16,10 @@ import 'write_params.dart';
 class FileWriter {
   /// Write entries to file (called via compute).
   /// This is the entry point for isolate work.
-  static Future<void> writeEntries(Map<String, dynamic> paramsMap) async {
+  static Future<bool> writeEntries(Map<String, dynamic> paramsMap) async {
     final params = WriteParams.fromMap(paramsMap);
     LogEncryptor? encryptor;
+    var rotated = false;
 
     try {
       // 1. Setup components
@@ -50,7 +51,7 @@ class FileWriter {
       await logFile.writeAsString(dataToWrite, mode: FileMode.append);
 
       // 6. Check rotation
-      await _checkRotation(
+      rotated = await _checkRotation(
         logFile: logFile,
         params: params,
       );
@@ -61,6 +62,7 @@ class FileWriter {
       // Always dispose encryptor to zero key material
       encryptor?.dispose();
     }
+    return rotated;
   }
 
   static LogFormatter _createFormatter(int formatType) {
@@ -93,29 +95,30 @@ class FileWriter {
     return LogRedactor(redactionPatterns);
   }
 
-  static Future<void> _checkRotation({
+  static Future<bool> _checkRotation({
     required File logFile,
     required WriteParams params,
   }) async {
     try {
-      if (!await logFile.exists()) return;
+      if (!await logFile.exists()) return false;
 
       final size = await logFile.length();
-      if (size < params.maxFileSize) return;
+      if (size < params.maxFileSize) return false;
 
       final strategy = RotationStrategy.values[params.rotationStrategy];
 
       switch (strategy) {
         case RotationStrategy.multiFile:
           await _rotateMultiFile(logFile, params);
-          break;
+          return true;
         case RotationStrategy.singleFile:
           await _trimSingleFile(logFile, params);
-          break;
+          return true;
       }
     } catch (e) {
       // Silent fail - rotation errors shouldn't crash logging
     }
+    return false;
   }
 
   static Future<void> _rotateMultiFile(
@@ -125,13 +128,13 @@ class FileWriter {
     final dir = logFile.parent;
 
     // Delete oldest backup if at limit
-    final oldestBackup = File('${dir.path}/backup_${params.maxFiles - 1}.log');
+    final oldestBackup = File('${dir.path}/backup_${params.maxFiles}.log');
     if (await oldestBackup.exists()) {
       await oldestBackup.delete();
     }
 
     // Rotate existing backups (move backward)
-    for (var i = params.maxFiles - 2; i >= 1; i--) {
+    for (var i = params.maxFiles - 1; i >= 1; i--) {
       final backup = File('${dir.path}/backup_$i.log');
       if (await backup.exists()) {
         await backup.rename('${dir.path}/backup_${i + 1}.log');
@@ -162,17 +165,21 @@ class FileWriter {
 
       if (lines.isEmpty) return;
 
-      // Remove oldest X%
-      final linesToRemove = (lines.length * params.trimPercent / 100).ceil();
-      if (linesToRemove >= lines.length) {
-        // Don't delete everything, keep at least 10%
-        final linesToKeep = (lines.length * 0.1).ceil();
-        final remainingLines = lines.skip(lines.length - linesToKeep).toList();
-        await logFile.writeAsString('${remainingLines.join('\n')}\n');
-      } else {
-        final remainingLines = lines.skip(linesToRemove).toList();
-        await logFile.writeAsString('${remainingLines.join('\n')}\n');
+      var remaining = lines;
+      // Iteratively trim until under size or minimal lines remain
+      while (remaining.length > 10) {
+        final estimatedSize =
+            remaining.fold<int>(remaining.length, (s, l) => s + l.length);
+        if (estimatedSize <= params.maxFileSize) break;
+
+        final linesToRemove =
+            (remaining.length * params.trimPercent / 100).ceil();
+        final safeRemove =
+            linesToRemove >= remaining.length ? remaining.length - 10 : linesToRemove;
+        remaining = remaining.skip(safeRemove).toList();
       }
+
+      await logFile.writeAsString('${remaining.join('\n')}\n');
     } catch (e) {
       // If trim fails, just clear the file to prevent infinite growth
       await logFile.writeAsString('');
