@@ -1,15 +1,42 @@
 import 'dart:math';
 import 'dart:typed_data';
 
-/// Key provider function type.
+/// Function type for providing encryption keys asynchronously.
+///
+/// Should return a 32-byte key for AES-256 encryption.
+/// Typically retrieves the key from secure storage.
 typedef KeyProvider = Future<Uint8List> Function();
 
-/// Configuration for log encryption.
+/// Configuration for log encryption using AES-256-GCM.
+///
+/// Provides secure encryption for log files to protect sensitive data.
+/// Keys should be stored securely (e.g., in Flutter Secure Storage).
+///
+/// ## Example
+///
+/// ```dart
+/// // With async key provider (recommended)
+/// EncryptionConfig.aes256(
+///   keyProvider: () async => await secureStorage.read('log_key'),
+/// )
+///
+/// // Generate a new key
+/// final key = EncryptionConfig.generateKey();
+/// await secureStorage.write('log_key', key);
+///
+/// // Disable encryption
+/// EncryptionConfig.none()
+/// ```
 class EncryptionConfig {
-  /// Create disabled encryption config.
+  /// Creates a disabled encryption configuration.
+  ///
+  /// Logs will be stored in plain text without encryption.
   const factory EncryptionConfig.none() = _NoEncryption;
 
-  /// Create AES-256-GCM encryption with key provider.
+  /// Creates AES-256-GCM encryption configuration with an async key provider.
+  ///
+  /// The [keyProvider] function should return a 32-byte key.
+  /// This is the recommended approach as it allows secure key storage.
   factory EncryptionConfig.aes256({
     required KeyProvider keyProvider,
   }) =>
@@ -18,8 +45,12 @@ class EncryptionConfig {
         keyProvider: keyProvider,
       );
 
-  /// Create AES-256-GCM encryption with static key.
-  /// WARNING: Not recommended for production.
+  /// Creates AES-256-GCM encryption with a static key.
+  ///
+  /// **WARNING**: Not recommended for production use as the key is stored
+  /// in memory. Use [EncryptionConfig.aes256] with a secure key provider instead.
+  ///
+  /// The [key] must be exactly 32 bytes for AES-256.
   factory EncryptionConfig.aes256WithKey({
     required Uint8List key,
   }) {

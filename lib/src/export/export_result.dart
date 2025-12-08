@@ -1,7 +1,23 @@
 import 'dart:io';
 
 /// Result of a log export operation.
+///
+/// Contains the exported file and metadata about the export,
+/// including size information and compression statistics.
+///
+/// ## Example
+///
+/// ```dart
+/// final result = await Logiq.export(timeRange: Duration(hours: 24));
+/// print('Exported ${result.entryCount} entries');
+/// print('File: ${result.file.path}');
+/// print('Size: ${result.formattedCompressedSize}');
+/// print('Compression: ${result.compressionPercent.toStringAsFixed(1)}% saved');
+/// ```
 class ExportResult {
+  /// Creates an export result with the specified metadata.
+  ///
+  /// Typically created internally by [Logiq.export()].
   const ExportResult({
     required this.file,
     required this.originalSize,

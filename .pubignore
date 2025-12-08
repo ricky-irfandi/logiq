@@ -11,6 +11,7 @@ build/
 .vscode/
 *.iml
 .DS_Store
+__MACOSX
 Thumbs.db
 
 # Logs / temp
@@ -24,7 +25,13 @@ test_results/
 lcov.info
 
 # Example app (if you don't want to publish it)
-example/
+example/.dart_tool/
+example/android/
+example/ios/
+example/macos/
+example/linux/
+example/web/
+example/windows/
 
 # Local scripts/tools (if any)
 tool/

@@ -1,8 +1,28 @@
 import 'package:flutter/foundation.dart';
 import '../ui/log_viewer_theme.dart';
 
-/// Configuration for debug log viewer.
+/// Configuration for the built-in debug log viewer UI.
+///
+/// Controls visibility and appearance of the log viewer screen
+/// and floating debug button.
+///
+/// ## Example
+///
+/// ```dart
+/// // Enable only in debug mode (default)
+/// DebugViewerConfig()
+///
+/// // Always enabled with custom theme
+/// DebugViewerConfig(
+///   enabled: true,
+///   theme: LogViewerTheme(backgroundColor: Colors.black),
+///   floatingButtonPosition: FloatingButtonPosition.bottomLeft,
+/// )
+/// ```
 class DebugViewerConfig {
+  /// Creates a debug viewer configuration with the specified options.
+  ///
+  /// By default, enabled only in debug mode (`kDebugMode`).
   const DebugViewerConfig({
     this.enabled = kDebugMode,
     this.theme = const LogViewerTheme(),
@@ -22,6 +42,7 @@ class DebugViewerConfig {
   /// Position of floating button.
   final FloatingButtonPosition floatingButtonPosition;
 
+  /// Creates a copy of this configuration with the specified fields replaced.
   DebugViewerConfig copyWith({
     bool? enabled,
     LogViewerTheme? theme,
@@ -38,10 +59,17 @@ class DebugViewerConfig {
   }
 }
 
-/// Position for floating debug button.
+/// Position options for the floating debug button overlay.
 enum FloatingButtonPosition {
+  /// Top-left corner of the screen.
   topLeft,
+
+  /// Top-right corner of the screen.
   topRight,
+
+  /// Bottom-left corner of the screen.
   bottomLeft,
+
+  /// Bottom-right corner of the screen (default).
   bottomRight,
 }

@@ -1,7 +1,37 @@
 import 'log_level.dart';
 
-/// Represents a single log entry.
+/// Represents a single log entry with all associated metadata.
+///
+/// A log entry contains the log message along with structured metadata
+/// including timestamp, severity level, category, and optional context data.
+///
+/// Log entries are immutable and can be serialized to various formats
+/// including JSON and compact JSON for efficient storage.
+///
+/// ## Example
+///
+/// ```dart
+/// final entry = LogEntry(
+///   timestamp: DateTime.now(),
+///   level: LogLevel.info,
+///   category: 'API',
+///   message: 'Request completed',
+///   context: {'statusCode': 200, 'duration': '150ms'},
+/// );
+/// ```
 class LogEntry {
+  /// Creates a new log entry with the specified parameters.
+  ///
+  /// Required parameters:
+  /// - [timestamp]: When the log was created
+  /// - [level]: Severity level of the log
+  /// - [category]: Category/tag for grouping related logs
+  /// - [message]: The log message content
+  ///
+  /// Optional parameters:
+  /// - [context]: Additional structured data to attach
+  /// - [sessionId]: Session identifier for grouping logs
+  /// - [sequenceNumber]: Sequence number for ordering
   const LogEntry({
     required this.timestamp,
     required this.level,
@@ -112,7 +142,10 @@ class LogEntry {
         if (sequenceNumber != null) 'n': sequenceNumber,
       };
 
-  /// Create a copy with modified fields.
+  /// Creates a copy of this log entry with the specified fields replaced.
+  ///
+  /// All parameters are optional. Only provided parameters will be updated;
+  /// others will retain their original values.
   LogEntry copyWith({
     DateTime? timestamp,
     LogLevel? level,

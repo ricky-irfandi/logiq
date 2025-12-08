@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../core/logiq.dart';
 
 /// Floating debug button overlay.
@@ -23,11 +24,11 @@ class DebugOverlayButton {
               decoration: BoxDecoration(
                 color: Colors.black87,
                 borderRadius: BorderRadius.circular(24),
-                boxShadow: [
+                boxShadow: const [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: (0.3)),
+                    color: Colors.black,
                     blurRadius: 8,
-                    offset: const Offset(0, 2),
+                    offset: Offset(0, 2),
                   ),
                 ],
               ),

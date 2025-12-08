@@ -1,3 +1,9 @@
+## 1.0.0-beta
+
+* Debug UI redesign
+* Added Light/Dark theme toggle and smooth transitions
+* Enhanced Debug UI with improved filtering, glassmorphism, and search
+
 ## 1.0.0-alpha
 
 * Initial release

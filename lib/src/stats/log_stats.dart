@@ -1,5 +1,20 @@
-/// Statistics about logging activity.
+/// Statistics about logging activity and storage usage.
+///
+/// Provides metrics for monitoring logging health and performance.
+/// Obtained via [Logiq.getStats()].
+///
+/// ## Example
+///
+/// ```dart
+/// final stats = await Logiq.getStats();
+/// print('Total: ${stats.totalLogged}');
+/// print('Dropped: ${stats.droppedCount}');
+/// print('Storage: ${stats.formattedStorageSize}');
+/// ```
 class LogStats {
+  /// Creates a log statistics snapshot.
+  ///
+  /// Typically created internally by [Logiq.getStats()].
   const LogStats({
     required this.totalLogged,
     required this.bufferedCount,

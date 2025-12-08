@@ -1,5 +1,37 @@
-/// Pattern for redacting sensitive information.
+/// Pattern for automatically redacting sensitive information from logs.
+///
+/// Defines a regex pattern to match sensitive data and a replacement string.
+/// Multiple built-in patterns are provided for common PII types.
+///
+/// ## Built-in Patterns
+///
+/// - [email] - Email addresses
+/// - [phone] - International phone numbers
+/// - [phoneIndonesia] - Indonesian phone numbers
+/// - [creditCard] - Credit card numbers
+/// - [ipAddress] - IPv4 and IPv6 addresses
+/// - [jwtToken] - JWT tokens
+/// - [nopolIndonesia] - Indonesian vehicle plates
+///
+/// ## Example
+///
+/// ```dart
+/// // Use built-in patterns
+/// redactionPatterns: RedactionPattern.defaults
+///
+/// // Custom pattern
+/// RedactionPattern(
+///   name: 'api_key',
+///   pattern: RegExp(r'api_key[=:]\s*([a-zA-Z0-9]+)'),
+///   replacement: 'api_key=[REDACTED]',
+/// )
+/// ```
 class RedactionPattern {
+  /// Creates a redaction pattern with the specified name, regex, and replacement.
+  ///
+  /// - [name]: Identifier for this pattern (for debugging/logging)
+  /// - [pattern]: Regex pattern to match sensitive data
+  /// - [replacement]: String to replace matched data (default: '[REDACTED]')
   const RedactionPattern({
     required this.name,
     required this.pattern,

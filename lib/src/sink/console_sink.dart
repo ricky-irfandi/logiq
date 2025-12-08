@@ -5,12 +5,25 @@ import 'log_sink.dart';
 
 /// Sink that writes logs to the debug console with ANSI colors.
 class ConsoleSink extends LogSink {
+  /// Creates a console sink that outputs logs to the debug console.
+  ///
+  /// Set [useColors] to `false` to disable ANSI color codes in output.
+  /// Set [minLevel] to filter out logs below a certain severity level.
   const ConsoleSink({
     this.useColors = true,
     this.minLevel = LogLevel.verbose,
   });
 
+  /// Whether to use ANSI color codes for log level highlighting.
+  ///
+  /// Defaults to `true`. Set to `false` for terminals that don't support
+  /// ANSI escape sequences.
   final bool useColors;
+
+  /// The minimum log level to output.
+  ///
+  /// Logs with a level below this threshold will be ignored.
+  /// Defaults to [LogLevel.verbose] (all logs are shown).
   final LogLevel minLevel;
 
   @override

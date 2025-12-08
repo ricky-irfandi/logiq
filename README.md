@@ -18,7 +18,7 @@ Logiq is an enterprise-grade logging solution designed for Flutter apps with a f
 - **📤 Export** - GZip compressed exports with device info
 - **🎯 Session Tracking** - Correlate logs across sessions
 - **💾 Auto-Cleanup** - Retention policies for old logs
-- **🎨 Customizable** - Formatters, sinks, hooks, and more
+- **🎨 Customizable** - Formatters, sinks, hooks, and themes
 
 ## 📱 Platform Support
 
@@ -255,6 +255,17 @@ rotation: RotationConfig.singleFile(
 
 ## 📊 Debug UI
 
+### Features
+
+The built-in log viewer features:
+- **Light/Dark Themes** - Tap the sun/moon icon to toggle 
+- **Real-time Updates** - Auto-refresh every 15 seconds
+- **Smart Filtering** - Filter by log level with refined chips
+- **Search** - Quick search with glassmorphism design
+- **Dual Views** - Card view or compact text view
+- **Export & Share** - Native share sheet integration
+- **Detail Sheets** - Tap any log to see full details with context
+
 ### Show Floating Debug Button
 
 ```dart
@@ -283,19 +294,37 @@ ElevatedButton(
 )
 ```
 
-### Custom Theme
+### Themes
+
+The log viewer includes **two built-in themes**:
 
 ```dart
+// Use dark theme (default)
+debugViewer: const DebugViewerConfig(
+  enabled: true,
+  theme: LogViewerTheme.dark,
+)
+
+// Use light theme
+debugViewer: const DebugViewerConfig(
+  enabled: true,
+  theme: LogViewerTheme.light,
+)
+
+// Custom theme
 debugViewer: DebugViewerConfig(
   enabled: true,
   theme: LogViewerTheme(
-    backgroundColor: Color(0xFF1E1E1E),
-    textColor: Color(0xFFD4D4D4),
-    errorColor: Color(0xFFE57373),
+    backgroundColor: Color(0xFF000000),
+    surfaceColor: Color(0xFF1C1C1E),
+    textColor: Color(0xFFF2F2F7),
+    accentColor: Color(0xFF007AFF),
     // ... more customization
   ),
 )
 ```
+
+**Note:** Users can toggle between light and dark mode at runtime using the sun/moon button in the viewer.
 
 ## 📤 Export
 
@@ -597,6 +626,14 @@ Contributions are welcome! Please open an issue or submit a pull request.
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## Issues
+
+If you encounter any issues or have suggestions, please file them in the [GitHub Issues](https://github.com/ricky-irfandi/logiq/issues).
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a detailed changelog.
+
 ## 🙏 Acknowledgments
 
 - Built with ❤️ for the Flutter community
@@ -606,4 +643,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Made with ❤️ by the Ricky Irfandi**
+**Made with ❤️ by [Ricky-Irfandi](https://github.com/ricky-irfandi)**

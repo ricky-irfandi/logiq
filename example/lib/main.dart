@@ -211,7 +211,7 @@ class _HomePageState extends State<HomePage> {
             icon: const Icon(Icons.info),
             onPressed: () async {
               final stats = await Logiq.getStats();
-              if (!mounted) return;
+              if (!context.mounted) return;
               showDialog(
                 context: context,
                 builder: (context) => AlertDialog(
@@ -233,7 +233,8 @@ class _HomePageState extends State<HomePage> {
             icon: const Icon(Icons.download),
             onPressed: () async {
               try {
-                ScaffoldMessenger.of(context).showSnackBar(
+                final scaffoldMessenger = ScaffoldMessenger.of(context);
+                scaffoldMessenger.showSnackBar(
                   const SnackBar(content: Text('Exporting logs...')),
                 );
                 final result = await Logiq.export(
@@ -241,6 +242,7 @@ class _HomePageState extends State<HomePage> {
                   includeDeviceInfo: true,
                 );
                 if (!mounted) return;
+                if (!context.mounted) return;
                 showDialog(
                   context: context,
                   builder: (context) => AlertDialog(
@@ -256,6 +258,7 @@ class _HomePageState extends State<HomePage> {
                 );
               } catch (e) {
                 if (!mounted) return;
+                if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Export failed: $e')),
                 );
@@ -269,6 +272,7 @@ class _HomePageState extends State<HomePage> {
             onPressed: () async {
               await Logiq.flush();
               if (!mounted) return;
+              if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Logs flushed to disk')),
               );
@@ -282,6 +286,7 @@ class _HomePageState extends State<HomePage> {
               await Logiq.clear();
               setState(() => _logCount = 0);
               if (!mounted) return;
+              if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('All logs cleared')),
               );
@@ -306,6 +311,7 @@ class _HomePageState extends State<HomePage> {
                 await Future.delayed(const Duration(milliseconds: 500));
               });
               if (!mounted) return;
+              if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Sensitive operation complete (not logged)'),

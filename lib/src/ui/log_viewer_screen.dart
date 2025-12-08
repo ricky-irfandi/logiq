@@ -1,19 +1,33 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui';
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
+
+import '../config/format_config.dart';
 import '../core/log_entry.dart';
 import '../core/log_level.dart';
 import '../core/logiq.dart';
-import '../config/format_config.dart';
 import '../format/csv_formatter.dart';
 import '../security/log_encryptor.dart';
 import 'log_viewer_theme.dart';
 
-/// Built-in log viewer screen with beautiful card-based UI and real-time updates.
+/// Extension to replace deprecated withOpacity with Color.fromRGBO.
+/// This avoids precision loss and is compatible with older Flutter SDKs.
+extension _ColorOpacity on Color {
+  Color withOpacityCompat(double opacity) {
+    // Using red/green/blue for Flutter 3.24 compatibility
+    // ignore: deprecated_member_use
+    return Color.fromRGBO(red, green, blue, opacity);
+  }
+}
+
+/// Apple-inspired log viewer with elegant UI and smooth animations.
 class LogViewerScreen extends StatefulWidget {
   const LogViewerScreen({
     super.key,
@@ -28,28 +42,32 @@ class LogViewerScreen extends StatefulWidget {
   State<LogViewerScreen> createState() => _LogViewerScreenState();
 }
 
-class _LogViewerScreenState extends State<LogViewerScreen> {
+class _LogViewerScreenState extends State<LogViewerScreen>
+    with TickerProviderStateMixin {
   final List<LogEntry> _logEntries = [];
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
-
-  // Limit to last N entries for low-end device performance
   static const int _maxEntries = 1000;
 
   bool _isLoading = true;
   String? _error;
   final Set<LogLevel> _selectedLevels = LogLevel.values.toSet();
   String _searchQuery = '';
-  bool _autoScroll = true;
-  bool _compactView = false; // Toggle between card and compact text view
+  final bool _autoScroll = true;
+  bool _compactView = true;
+  bool _isDarkMode = false;
   Timer? _refreshTimer;
+  late AnimationController _fadeController;
 
   @override
   void initState() {
     super.initState();
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
     _loadLogs();
-    // Real-time updates every 2 seconds
-    _refreshTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (mounted) _loadLogs(showLoading: false);
     });
   }
@@ -63,10 +81,7 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
     }
 
     try {
-      // Determine active log format so we can parse lines appropriately.
       final logFormat = Logiq.config.format.type;
-      // Try to obtain encryption key if encryption is enabled so we can
-      // transparently read encrypted log lines in the viewer.
       LogEncryptor? encryptor;
       try {
         final encryptionConfig = Logiq.config.encryption;
@@ -75,8 +90,6 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
           encryptor = LogEncryptor(key);
         }
       } catch (_) {
-        // If key retrieval or encryptor creation fails, fall back to
-        // plain-text parsing without breaking the UI.
         encryptor = null;
       }
 
@@ -91,7 +104,6 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
 
       final entries = <LogEntry>[];
 
-      // Load all log files
       await for (final file in dir.list()) {
         if (file is File && file.path.endsWith('.log')) {
           try {
@@ -104,21 +116,15 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
                 format: logFormat,
                 encryptor: encryptor,
               );
-              if (entry != null) {
-                entries.add(entry);
-              }
+              if (entry != null) entries.add(entry);
             }
           } catch (e) {
-            // Skip files that can't be read (e.g., being written)
             continue;
           }
         }
       }
 
-      // Sort by timestamp (newest first for better UX)
       entries.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-      // Limit to max entries for performance on low-end devices
       final limitedEntries = entries.take(_maxEntries).toList();
 
       setState(() {
@@ -127,20 +133,20 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
         _isLoading = false;
       });
 
-      // Only auto-scroll on manual refresh, not on background updates
+      _fadeController.forward(from: 0);
+
       if (showLoading && _autoScroll && _scrollController.hasClients) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_scrollController.hasClients) {
             _scrollController.animateTo(
-              0, // Scroll to top (newest)
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOut,
+              0,
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeOutCubic,
             );
           }
         });
       }
 
-      // Dispose encryptor after use to zero key material from memory.
       encryptor?.dispose();
     } catch (e) {
       if (showLoading) {
@@ -152,14 +158,11 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
     }
   }
 
-  /// Parse log line - supports JSON, compact JSON, plain text, CSV, and
-  /// their encrypted variants when encryption is enabled.
   LogEntry? _parseLogLine(
     String line, {
     required LogFormat format,
     LogEncryptor? encryptor,
   }) {
-    // Helper to parse a single, already-decoded payload according to format.
     LogEntry? parsePayload(String payload) {
       switch (format) {
         case LogFormat.json:
@@ -180,16 +183,13 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
         case LogFormat.csv:
           return _parseCsvLine(payload);
         case LogFormat.custom:
-          // Custom formatter can't be reliably reversed; fall back to plain text.
           return _parsePlainText(payload);
       }
     }
 
-    // 1) Try parsing as-is (for non-encrypted logs).
     final direct = parsePayload(line);
     if (direct != null) return direct;
 
-    // 2) Try decrypting base64-encoded ciphertext if encryptor is available.
     if (encryptor != null) {
       try {
         final trimmed = line.trim();
@@ -199,21 +199,14 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
           final decryptedEntry = parsePayload(decrypted);
           if (decryptedEntry != null) return decryptedEntry;
         }
-      } catch (_) {
-        // Decrypt or parse failed, fall through to final fallback.
-      }
+      } catch (_) {}
     }
 
-    // 3) Final fallback: attempt plain text parse.
     return _parsePlainText(line);
   }
 
-  /// Fallback parser for plain text logs
   LogEntry? _parsePlainText(String line) {
     try {
-      // Expected format (from PlainTextFormatter):
-      // [timestamp] [LEVEL] [CATEGORY] message {optional JSON context}
-      // LEVEL is padded to width 7, e.g. [INFO   ], so allow trailing spaces.
       final match = RegExp(
         r'^\[(.*?)\]\s+\[(.*?)\]\s+\[(.*?)\]\s+(.*)$',
       ).firstMatch(line);
@@ -225,7 +218,6 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
       final category = match.group(3)!.trim();
       var messageAndContext = match.group(4)!.trim();
 
-      // Parse timestamp (falls back to now on failure).
       DateTime timestamp;
       try {
         timestamp = DateTime.parse(timestampStr);
@@ -233,7 +225,6 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
         timestamp = DateTime.now();
       }
 
-      // Try to split out JSON context at the end if present.
       Map<String, dynamic>? context;
       final contextStart = messageAndContext.indexOf('{');
       if (contextStart != -1) {
@@ -242,16 +233,11 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
         messageAndContext = messagePart;
         try {
           final decoded = jsonDecode(contextPart);
-          if (decoded is Map<String, dynamic>) {
-            context = decoded;
-          }
-        } catch (_) {
-          // If context JSON fails, keep message-only entry.
-        }
+          if (decoded is Map<String, dynamic>) context = decoded;
+        } catch (_) {}
       }
 
-      final level =
-          LogLevel.tryParse(levelStr.toLowerCase()) ?? LogLevel.info;
+      final level = LogLevel.tryParse(levelStr.toLowerCase()) ?? LogLevel.info;
 
       return LogEntry(
         timestamp: timestamp,
@@ -265,16 +251,9 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
     }
   }
 
-  /// Parser for CSV logs created by CsvFormatter.
-  ///
-  /// Expected schema:
-  /// timestamp,level,category,message,context,sessionId
   LogEntry? _parseCsvLine(String line) {
     try {
-      // Skip header row
-      if (line.trim() == CsvFormatter.header) {
-        return null;
-      }
+      if (line.trim() == CsvFormatter.header) return null;
 
       final cells = _splitCsvLine(line);
       if (cells.length < 6) return null;
@@ -297,16 +276,11 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
       if (contextStr.isNotEmpty) {
         try {
           final decoded = jsonDecode(contextStr);
-          if (decoded is Map<String, dynamic>) {
-            context = decoded;
-          }
-        } catch (_) {
-          // Ignore malformed context JSON.
-        }
+          if (decoded is Map<String, dynamic>) context = decoded;
+        } catch (_) {}
       }
 
-      final level =
-          LogLevel.tryParse(levelStr.toLowerCase()) ?? LogLevel.info;
+      final level = LogLevel.tryParse(levelStr.toLowerCase()) ?? LogLevel.info;
 
       return LogEntry(
         timestamp: timestamp,
@@ -321,7 +295,6 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
     }
   }
 
-  /// Minimal CSV splitter that understands quoted fields with commas.
   List<String> _splitCsvLine(String line) {
     final result = <String>[];
     final buffer = StringBuffer();
@@ -331,7 +304,6 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
       final char = line[i];
       if (char == '"') {
         if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
-          // Escaped quote
           buffer.write('"');
           i++;
         } else {
@@ -350,156 +322,239 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
 
   List<LogEntry> get _filteredEntries {
     return _logEntries.where((entry) {
-      // Filter by level
-      if (!_selectedLevels.contains(entry.level)) {
-        return false;
-      }
-
-      // Filter by search query
+      if (!_selectedLevels.contains(entry.level)) return false;
       if (_searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
         return entry.message.toLowerCase().contains(query) ||
             entry.category.toLowerCase().contains(query);
       }
-
       return true;
     }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: widget.theme.backgroundColor,
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: widget.theme.backgroundColor,
-        surfaceTintColor: Colors.transparent,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          tooltip: 'Back to app',
-          onPressed: () => Navigator.of(context).pop(),
+    final theme = _isDarkMode ? widget.theme : LogViewerTheme.light;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: theme.backgroundColor,
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(),
+              _buildSearchBar(),
+              _buildFilterChips(),
+              Expanded(child: _buildBody()),
+            ],
+          ),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Logs', style: TextStyle(fontSize: 20)),
-            Text(
-              'Real-time • ${_filteredEntries.length} entries',
-              style: TextStyle(
-                fontSize: 12,
-                color: widget.theme.textColor.withValues(alpha: (0.6)),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    final theme = _isDarkMode ? widget.theme : LogViewerTheme.light;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+      child: Row(
+        children: [
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            onPressed: () => Navigator.of(context).pop(),
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: theme.surfaceColor,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                Icons.chevron_left_rounded,
+                color: theme.accentColor,
+                size: 20,
               ),
             ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(_compactView ? Icons.view_agenda : Icons.view_list,
-                color: Colors.white),
-            tooltip: _compactView ? 'Card View' : 'Compact View',
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Console',
+                  style: TextStyle(
+                    color: theme.textColor,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                Text(
+                  '${_filteredEntries.length} entries • Live',
+                  style: TextStyle(
+                    color: theme.secondaryTextColor,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _buildIconButton(
+            icon:
+                _compactView ? Icons.view_agenda_outlined : Icons.list_rounded,
             onPressed: () => setState(() => _compactView = !_compactView),
           ),
-          IconButton(
-            icon: const Icon(Icons.upload_file, color: Colors.white),
-            tooltip: 'Export & Share Logs',
+          _buildIconButton(
+            icon: Icons.ios_share_rounded,
             onPressed: _exportLogs,
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            tooltip: 'Refresh',
+          _buildIconButton(
+            icon: _isDarkMode
+                ? Icons.light_mode_outlined
+                : Icons.dark_mode_outlined,
+            onPressed: () => setState(() => _isDarkMode = !_isDarkMode),
+          ),
+          _buildIconButton(
+            icon: Icons.refresh_rounded,
             onPressed: () => _loadLogs(),
           ),
-          IconButton(
-            icon: Icon(
-              _autoScroll
-                  ? Icons.vertical_align_top
-                  : Icons.vertical_align_center,
-              color: Colors.white,
-            ),
-            tooltip: _autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF',
-            onPressed: () => setState(() => _autoScroll = !_autoScroll),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Search bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: TextField(
-              controller: _searchController,
-              style: TextStyle(color: widget.theme.textColor),
-              decoration: InputDecoration(
-                hintText: 'Search logs...',
-                hintStyle: TextStyle(
-                  color: widget.theme.textColor.withValues(
-                    alpha: (0.5),
-                  ),
-                ),
-                prefixIcon: Icon(Icons.search, color: widget.theme.textColor),
-                filled: true,
-                fillColor: widget.theme.textColor.withValues(alpha: (0.05)),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              ),
-              onChanged: (value) => setState(() => _searchQuery = value),
-            ),
-          ),
-          // Level filter chips
-          SizedBox(
-            height: 48,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: LogLevel.values.length,
-              itemBuilder: (context, index) {
-                final level = LogLevel.values[index];
-                final isSelected = _selectedLevels.contains(level);
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: FilterChip(
-                    selected: isSelected,
-                    label: Text(level.name.toUpperCase()),
-                    labelStyle: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected
-                          ? Colors.white
-                          : widget.theme.colorForLevel(level.value),
-                    ),
-                    backgroundColor: widget.theme
-                        .colorForLevel(level.value)
-                        .withValues(alpha: (0.1)),
-                    selectedColor: widget.theme.colorForLevel(level.value),
-                    checkmarkColor: Colors.white,
-                    onSelected: (selected) {
-                      setState(() {
-                        if (selected) {
-                          _selectedLevels.add(level);
-                        } else {
-                          _selectedLevels.remove(level);
-                        }
-                      });
-                    },
-                  ),
-                );
-              },
-            ),
-          ),
-          const Divider(height: 1),
-          // Log entries
-          Expanded(child: _buildBody()),
         ],
       ),
     );
   }
 
+  Widget _buildIconButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    final theme = _isDarkMode ? widget.theme : LogViewerTheme.light;
+    return CupertinoButton(
+      padding: const EdgeInsets.all(8),
+      onPressed: onPressed,
+      child: Icon(icon, color: theme.accentColor, size: 22),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    final theme = _isDarkMode ? widget.theme : LogViewerTheme.light;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            height: 40,
+            decoration: BoxDecoration(
+              color: theme.surfaceColor.withOpacityCompat(0.8),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TextField(
+              controller: _searchController,
+              style: TextStyle(
+                color: widget.theme.textColor,
+                fontSize: 15,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Search',
+                hintStyle: TextStyle(color: theme.secondaryTextColor),
+                prefixIcon: Icon(
+                  Icons.search_rounded,
+                  color: theme.secondaryTextColor,
+                  size: 20,
+                ),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              onChanged: (value) => setState(() => _searchQuery = value),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChips() {
+    final theme = _isDarkMode ? widget.theme : LogViewerTheme.light;
+    return SizedBox(
+      height: 36,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: LogLevel.values.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        itemBuilder: (context, index) {
+          final level = LogLevel.values[index];
+          final isSelected = _selectedLevels.contains(level);
+          final color = theme.colorForLevel(level.value);
+
+          return GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              setState(() {
+                if (isSelected) {
+                  _selectedLevels.remove(level);
+                } else {
+                  _selectedLevels.add(level);
+                }
+              });
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? color.withOpacityCompat(0.15)
+                    : theme.surfaceColor,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isSelected
+                      ? color.withOpacityCompat(0.5)
+                      : Colors.transparent,
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: isSelected ? color : color.withOpacityCompat(0.5),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    level.name[0].toUpperCase() + level.name.substring(1),
+                    style: TextStyle(
+                      color:
+                          isSelected ? color : widget.theme.secondaryTextColor,
+                      fontSize: 13,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildBody() {
+    final theme = _isDarkMode ? widget.theme : LogViewerTheme.light;
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return Center(
+        child: CupertinoActivityIndicator(
+          color: widget.theme.accentColor,
+        ),
+      );
     }
 
     if (_error != null) {
@@ -507,14 +562,23 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, color: widget.theme.errorColor, size: 48),
+            Icon(
+              Icons.error_outline_rounded,
+              color: theme.errorColor,
+              size: 48,
+            ),
             const SizedBox(height: 16),
-            Text(_error!, style: TextStyle(color: widget.theme.textColor)),
+            Text(
+              _error!,
+              style: TextStyle(color: theme.secondaryTextColor),
+            ),
             const SizedBox(height: 16),
-            ElevatedButton.icon(
+            CupertinoButton(
               onPressed: () => _loadLogs(),
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
+              child: Text(
+                'Retry',
+                style: TextStyle(color: theme.accentColor),
+              ),
             ),
           ],
         ),
@@ -530,15 +594,26 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
           children: [
             Icon(
               Icons.inbox_outlined,
-              size: 64,
-              color: widget.theme.textColor.withValues(alpha: (0.3)),
+              size: 56,
+              color: widget.theme.separatorColor,
             ),
             const SizedBox(height: 16),
             Text(
-              _searchQuery.isNotEmpty ? 'No matching logs' : 'No logs yet',
+              _searchQuery.isNotEmpty ? 'No Results' : 'No Logs',
               style: TextStyle(
-                color: widget.theme.textColor.withValues(alpha: (0.6)),
-                fontSize: 16,
+                color: widget.theme.textColor,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _searchQuery.isNotEmpty
+                  ? 'Try a different search term'
+                  : 'Logs will appear here',
+              style: TextStyle(
+                color: theme.secondaryTextColor,
+                fontSize: 15,
               ),
             ),
           ],
@@ -546,195 +621,68 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
       );
     }
 
-    return ListView.builder(
-      controller: _scrollController,
-      padding: _compactView
-          ? const EdgeInsets.symmetric(vertical: 4)
-          : const EdgeInsets.all(12),
-      itemCount: entries.length,
-      itemBuilder: (context, index) {
-        final entry = entries[index];
-
-        // Switch between compact and card view
-        if (_compactView) {
-          return _CompactLogTile(
-            entry: entry,
-            theme: widget.theme,
-            onTap: () => _showLogDetail(entry),
-          );
-        } else {
-          return _LogCard(
-            entry: entry,
-            theme: widget.theme,
-            searchQuery: _searchQuery,
-            onTap: () => _showLogDetail(entry),
-          );
-        }
-      },
-    );
-  }
-
-  void _showLogDetail(LogEntry entry) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: widget.theme.backgroundColor,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (context, scrollController) {
-          return Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Log Details',
-                        style: TextStyle(
-                          color: widget.theme.textColor,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.copy),
-                      tooltip: 'Copy',
-                      onPressed: () {
-                        final text = jsonEncode(entry.toJson());
-                        Clipboard.setData(ClipboardData(text: text));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Copied to clipboard'),
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: SingleChildScrollView(
-                    controller: scrollController,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _DetailRow(
-                          'Level',
-                          entry.level.name.toUpperCase(),
-                          widget.theme.colorForLevel(entry.level.value),
-                        ),
-                        _DetailRow('Category', entry.category, null),
-                        _DetailRow(
-                          'Time',
-                          DateFormat('MMM dd, yyyy HH:mm:ss.SSS')
-                              .format(entry.timestamp.toLocal()),
-                          null,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Message',
-                          style: TextStyle(
-                            color:
-                                widget.theme.textColor.withValues(alpha: (0.6)),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        SelectableText(
-                          entry.message,
-                          style: TextStyle(
-                            color: widget.theme.textColor,
-                            fontSize: 15,
-                            height: 1.5,
-                          ),
-                        ),
-                        if (entry.context != null) ...[
-                          const SizedBox(height: 20),
-                          Text(
-                            'Context',
-                            style: TextStyle(
-                              color: widget.theme.textColor
-                                  .withValues(alpha: (0.6)),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: widget.theme.textColor
-                                  .withValues(alpha: (0.05)),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: SelectableText(
-                              const JsonEncoder.withIndent('  ')
-                                  .convert(entry.context),
-                              style: TextStyle(
-                                color: widget.theme.textColor,
-                                fontFamily: 'monospace',
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
+    return FadeTransition(
+      opacity: _fadeController,
+      child: ListView.builder(
+        controller: _scrollController,
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        itemCount: entries.length,
+        itemBuilder: (context, index) {
+          final entry = entries[index];
+          return _compactView
+              ? _AppleCompactTile(
+                  entry: entry,
+                  theme: theme,
+                  onTap: () => _showLogDetail(entry),
+                )
+              : _AppleLogCard(
+                  entry: entry,
+                  theme: theme,
+                  onTap: () => _showLogDetail(entry),
+                );
         },
       ),
     );
   }
 
-  /// Export logs and show shareable file path
-  Future<void> _exportLogs() async {
-    // Show export options dialog
-    final result = await showDialog<Map<String, dynamic>>(
+  void _showLogDetail(LogEntry entry) {
+    final theme = _isDarkMode ? widget.theme : LogViewerTheme.light;
+    HapticFeedback.mediumImpact();
+    showCupertinoModalPopup(
       context: context,
-      builder: (context) => _ExportDialog(),
+      builder: (context) => _AppleLogDetailSheet(
+        entry: entry,
+        theme: theme,
+      ),
+    );
+  }
+
+  Future<void> _exportLogs() async {
+    final theme = _isDarkMode ? widget.theme : LogViewerTheme.light;
+    final result = await showCupertinoModalPopup<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => _AppleExportSheet(theme: theme),
     );
 
-    if (result == null) return; // User cancelled
+    if (result == null) return;
 
-    // Show loading
     if (!mounted) return;
-    showDialog(
+    showCupertinoDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(
-        child: Card(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('Exporting logs...'),
-              ],
-            ),
+      builder: (context) => Center(
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: widget.theme.surfaceColor,
+            borderRadius: BorderRadius.circular(16),
           ),
+          child: CupertinoActivityIndicator(color: theme.accentColor),
         ),
       ),
     );
 
     try {
-      // Export using Logiq.export()
       final exportResult = await Logiq.export(
         timeRange: result['timeRange'] as Duration?,
         compress: result['compress'] as bool? ?? true,
@@ -742,93 +690,61 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
       );
 
       if (!mounted) return;
-      Navigator.of(context).pop(); // Close loading dialog
+      Navigator.of(context).pop();
 
-      // Show success with file info
-      await showDialog(
+      await showCupertinoDialog(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => CupertinoAlertDialog(
           title: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.check_circle, color: Colors.green),
+              Icon(Icons.check_circle_rounded, color: Color(0xFF30D158)),
               SizedBox(width: 8),
               Text('Export Complete'),
             ],
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('File: ${exportResult.file.path.split('/').last}'),
-              const SizedBox(height: 8),
-              Text('Entries: ${exportResult.entryCount}'),
-              Text(
-                'Size: ${(exportResult.compressedSize / 1024).toStringAsFixed(1)} KB',
-              ),
-              if (exportResult.compressedSize < exportResult.originalSize)
-                Text(
-                  'Compressed: ${((1 - exportResult.compressedSize / exportResult.originalSize) * 100).toStringAsFixed(1)}%',
-                ),
-              const SizedBox(height: 16),
-              const Text(
-                'Send this file to your development team for debugging.',
-                style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-              ),
-            ],
+          content: Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(
+              '${exportResult.entryCount} entries\n'
+              '${(exportResult.compressedSize / 1024).toStringAsFixed(1)} KB',
+            ),
           ),
           actions: [
-            TextButton(
-              onPressed: () {
-                Clipboard.setData(
-                  ClipboardData(text: exportResult.file.path),
-                );
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('File path copied to clipboard'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              },
+            CupertinoDialogAction(
               child: const Text('Copy Path'),
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: exportResult.file.path));
+                Navigator.of(context).pop();
+              },
             ),
-            FilledButton.icon(
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              child: const Text('Share'),
               onPressed: () async {
-                Navigator.of(context).pop(); // Close dialog first
-
-                // Share the file using native share sheet
+                Navigator.of(context).pop();
                 await Share.shareXFiles(
                   [XFile(exportResult.file.path)],
-                  subject:
-                      'Logiq Export - ${exportResult.file.path.split('/').last}',
-                  text: 'Log export with ${exportResult.entryCount} entries',
+                  subject: 'Logiq Export',
                 );
               },
-              icon: const Icon(Icons.share),
-              label: const Text('Share'),
             ),
           ],
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      Navigator.of(context).pop(); // Close loading dialog
+      Navigator.of(context).pop();
 
-      // Show error
-      await showDialog(
+      await showCupertinoDialog(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.error, color: Colors.red),
-              SizedBox(width: 8),
-              Text('Export Failed'),
-            ],
-          ),
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('Export Failed'),
           content: Text(e.toString()),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+            CupertinoDialogAction(
               child: const Text('OK'),
+              onPressed: () => Navigator.of(context).pop(),
             ),
           ],
         ),
@@ -841,105 +757,371 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
     _refreshTimer?.cancel();
     _scrollController.dispose();
     _searchController.dispose();
+    _fadeController.dispose();
     super.dispose();
   }
 }
 
-/// Dialog for selecting export options
-class _ExportDialog extends StatefulWidget {
-  @override
-  State<_ExportDialog> createState() => _ExportDialogState();
-}
+// Apple-style log card
+class _AppleLogCard extends StatelessWidget {
+  const _AppleLogCard({
+    required this.entry,
+    required this.theme,
+    required this.onTap,
+  });
 
-class _ExportDialogState extends State<_ExportDialog> {
-  Duration? _timeRange;
-  bool _compress = true;
-  bool _includeDeviceInfo = true;
+  final LogEntry entry;
+  final LogViewerTheme theme;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Export Logs'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Select options for log export:',
-            style: TextStyle(fontSize: 14),
+    final color = theme.colorForLevel(entry.level.value);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            color: theme.surfaceColor,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: theme.separatorColor, width: 0.5),
           ),
-          const SizedBox(height: 16),
-          // Time range
-          DropdownButtonFormField<Duration?>(
-            value: _timeRange,
-            decoration: const InputDecoration(
-              labelText: 'Time Range',
-              border: OutlineInputBorder(),
-              isDense: true,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: color.withOpacityCompat(0.5),
+                            blurRadius: 6,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      entry.level.name.toUpperCase(),
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.separatorColor.withOpacityCompat(0.5),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        entry.category,
+                        style: TextStyle(
+                          color: theme.categoryColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      _formatTime(entry.timestamp),
+                      style: TextStyle(
+                        color: theme.timestampColor,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  entry.message,
+                  style: TextStyle(
+                    color: theme.textColor,
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (entry.context != null && entry.context!.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.description_outlined,
+                        size: 12,
+                        color: theme.timestampColor,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${entry.context!.length} fields',
+                        style: TextStyle(
+                          color: theme.timestampColor,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
-            items: const [
-              DropdownMenuItem(value: null, child: Text('All logs')),
-              DropdownMenuItem(
-                value: Duration(hours: 1),
-                child: Text('Last 1 hour'),
-              ),
-              DropdownMenuItem(
-                value: Duration(hours: 24),
-                child: Text('Last 24 hours'),
-              ),
-              DropdownMenuItem(
-                value: Duration(days: 7),
-                child: Text('Last 7 days'),
-              ),
-            ],
-            onChanged: (value) => setState(() => _timeRange = value),
           ),
-          const SizedBox(height: 12),
-          // Compress
-          SwitchListTile(
-            value: _compress,
-            onChanged: (value) => setState(() => _compress = value),
-            title: const Text('Compress (GZip)'),
-            subtitle: const Text('Recommended for large logs'),
-            contentPadding: EdgeInsets.zero,
-          ),
-          // Include device info
-          SwitchListTile(
-            value: _includeDeviceInfo,
-            onChanged: (value) => setState(() => _includeDeviceInfo = value),
-            title: const Text('Include Device Info'),
-            subtitle: const Text('Platform, OS version, etc.'),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ],
+        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+    );
+  }
+
+  String _formatTime(DateTime timestamp) {
+    final now = DateTime.now();
+    final diff = now.difference(timestamp);
+
+    if (diff.inSeconds < 60) return '${diff.inSeconds}s';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+    if (diff.inHours < 24) return '${diff.inHours}h';
+    return DateFormat('MMM d').format(timestamp.toLocal());
+  }
+}
+
+// Compact tile
+class _AppleCompactTile extends StatelessWidget {
+  const _AppleCompactTile({
+    required this.entry,
+    required this.theme,
+    required this.onTap,
+  });
+
+  final LogEntry entry;
+  final LogViewerTheme theme;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = theme.colorForLevel(entry.level.value);
+
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: theme.separatorColor, width: 0.5),
+          ),
         ),
-        FilledButton.icon(
-          onPressed: () {
-            Navigator.of(context).pop({
-              'timeRange': _timeRange,
-              'compress': _compress,
-              'includeDeviceInfo': _includeDeviceInfo,
-            });
-          },
-          icon: const Icon(Icons.upload_file),
-          label: const Text('Export'),
+        child: Row(
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              DateFormat('HH:mm:ss').format(entry.timestamp.toLocal()),
+              style: TextStyle(
+                color: theme.timestampColor,
+                fontSize: 12,
+                fontFamily: 'monospace',
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              entry.category,
+              style: TextStyle(
+                color: theme.categoryColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                entry.message,
+                style: TextStyle(color: theme.textColor, fontSize: 13),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
 
-class _DetailRow extends StatelessWidget {
-  const _DetailRow(this.label, this.value, this.color);
+// Detail sheet
+class _AppleLogDetailSheet extends StatelessWidget {
+  const _AppleLogDetailSheet({required this.entry, required this.theme});
+
+  final LogEntry entry;
+  final LogViewerTheme theme;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = theme.colorForLevel(entry.level.value);
+
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        decoration: BoxDecoration(
+          color: theme.surfaceColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              width: 36,
+              height: 5,
+              decoration: BoxDecoration(
+                color: theme.separatorColor,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration:
+                        BoxDecoration(color: color, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    entry.level.name.toUpperCase(),
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: () {
+                      Clipboard.setData(
+                        ClipboardData(text: jsonEncode(entry.toJson())),
+                      );
+                      HapticFeedback.mediumImpact();
+                    },
+                    child: Icon(
+                      Icons.copy_rounded,
+                      color: theme.accentColor,
+                      size: 22,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Divider(color: theme.separatorColor, height: 1),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  _DetailItem(
+                    label: 'Category',
+                    value: entry.category,
+                    theme: theme,
+                  ),
+                  _DetailItem(
+                    label: 'Time',
+                    value: DateFormat('MMM dd, yyyy HH:mm:ss.SSS')
+                        .format(entry.timestamp.toLocal()),
+                    theme: theme,
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Message',
+                    style: TextStyle(
+                      color: theme.secondaryTextColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SelectableText(
+                    entry.message,
+                    style: TextStyle(
+                      color: theme.textColor,
+                      fontSize: 15,
+                      height: 1.5,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                  if (entry.context != null) ...[
+                    const SizedBox(height: 24),
+                    Text(
+                      'Context',
+                      style: TextStyle(
+                        color: theme.secondaryTextColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: theme.backgroundColor,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: SelectableText(
+                        const JsonEncoder.withIndent('  ')
+                            .convert(entry.context),
+                        style: TextStyle(
+                          color: theme.textColor,
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailItem extends StatelessWidget {
+  const _DetailItem({
+    required this.label,
+    required this.value,
+    required this.theme,
+  });
 
   final String label;
   final String value;
-  final Color? color;
+  final LogViewerTheme theme;
 
   @override
   Widget build(BuildContext context) {
@@ -953,9 +1135,8 @@ class _DetailRow extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(
-                color: Colors.grey[600],
+                color: theme.secondaryTextColor,
                 fontSize: 13,
-                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -963,9 +1144,8 @@ class _DetailRow extends StatelessWidget {
             child: Text(
               value,
               style: TextStyle(
-                color: color ?? Colors.white,
+                color: theme.textColor,
                 fontSize: 14,
-                fontWeight: FontWeight.w500,
               ),
             ),
           ),
@@ -975,218 +1155,100 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
-/// Beautiful, lightweight log card with Material 3 design
-class _LogCard extends StatelessWidget {
-  const _LogCard({
-    required this.entry,
-    required this.theme,
-    required this.searchQuery,
-    required this.onTap,
-  });
-
-  final LogEntry entry;
+// Export sheet
+class _AppleExportSheet extends StatefulWidget {
+  const _AppleExportSheet({required this.theme});
   final LogViewerTheme theme;
-  final String searchQuery;
-  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final levelColor = theme.colorForLevel(entry.level.value);
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      elevation: 0,
-      color: theme.textColor.withValues(alpha: (0.03)),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: levelColor.withValues(alpha: (0.3)),
-          width: 1,
-        ),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header: Level chip + Timestamp
-              Row(
-                children: [
-                  // Level chip
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: levelColor,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      entry.level.name.toUpperCase(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Category chip
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: theme.textColor.withValues(alpha: (0.1)),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      entry.category,
-                      style: TextStyle(
-                        color: theme.textColor.withValues(alpha: (0.8)),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const Spacer(),
-                  // Timestamp
-                  Text(
-                    _formatTimestamp(entry.timestamp),
-                    style: TextStyle(
-                      color: theme.textColor.withValues(alpha: (0.5)),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              // Message
-              Text(
-                entry.message,
-                style: TextStyle(
-                  color: theme.textColor,
-                  fontSize: 14,
-                  height: 1.4,
-                ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-              // Context indicator
-              if (entry.context != null && entry.context!.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.code,
-                      size: 14,
-                      color: theme.textColor.withValues(alpha: (0.5)),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${entry.context!.length} context fields',
-                      style: TextStyle(
-                        color: theme.textColor.withValues(alpha: (0.5)),
-                        fontSize: 11,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _formatTimestamp(DateTime timestamp) {
-    final now = DateTime.now();
-    final diff = now.difference(timestamp);
-
-    if (diff.inSeconds < 60) {
-      return '${diff.inSeconds}s ago';
-    } else if (diff.inMinutes < 60) {
-      return '${diff.inMinutes}m ago';
-    } else if (diff.inHours < 24) {
-      return '${diff.inHours}h ago';
-    } else {
-      return DateFormat('MMM dd, HH:mm').format(timestamp.toLocal());
-    }
-  }
+  State<_AppleExportSheet> createState() => _AppleExportSheetState();
 }
 
-/// Compact text-based log tile for quick scanning
-/// Format: [LEVEL] [CATEGORY] message
-class _CompactLogTile extends StatelessWidget {
-  const _CompactLogTile({
-    required this.entry,
-    required this.theme,
-    required this.onTap,
-  });
-
-  final LogEntry entry;
-  final LogViewerTheme theme;
-  final VoidCallback onTap;
+class _AppleExportSheetState extends State<_AppleExportSheet> {
+  Duration? _timeRange;
+  bool _compress = true;
+  bool _includeDeviceInfo = true;
 
   @override
   Widget build(BuildContext context) {
-    final levelColor = theme.colorForLevel(entry.level.value);
-    final timestamp = _formatCompactTimestamp(entry.timestamp);
-
-    // Format: [12:34:56] [E] [API] Connection timeout
-    // Single letter: V=Verbose, D=Debug, I=Info, W=Warning, E=Error, F=Fatal
-    final levelText = _getLevelAbbreviation(entry.level);
-
-    return InkWell(
-      onTap: onTap,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        child: RichText(
-          text: TextSpan(
-            style: TextStyle(
-              fontFamily: theme.fontFamily,
-              fontSize: 13,
-              height: 1.5,
-            ),
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        decoration: BoxDecoration(
+          color: widget.theme.surfaceColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Timestamp
-              TextSpan(
-                text: '[$timestamp] ',
-                style: TextStyle(
-                  color: theme.textColor.withValues(alpha: (0.5)),
-                  fontWeight: FontWeight.w500,
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                width: 36,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: widget.theme.separatorColor,
+                  borderRadius: BorderRadius.circular(3),
                 ),
               ),
-              // Level (single letter)
-              TextSpan(
-                text: '[$levelText] ',
-                style: TextStyle(
-                  color: levelColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14, // Slightly larger for emphasis
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Text(
+                  'Export Logs',
+                  style: TextStyle(
+                    color: widget.theme.textColor,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-              // Category
-              TextSpan(
-                text: '[${entry.category}] ',
-                style: TextStyle(
-                  color: theme.textColor.withValues(alpha: (0.7)),
-                  fontWeight: FontWeight.w600,
+              _buildOption(
+                title: 'Time Range',
+                trailing: Text(
+                  _timeRange == null
+                      ? 'All'
+                      : _timeRange == const Duration(hours: 1)
+                          ? '1 hour'
+                          : _timeRange == const Duration(hours: 24)
+                              ? '24 hours'
+                              : '7 days',
+                  style: TextStyle(color: widget.theme.secondaryTextColor),
+                ),
+                onTap: () => _showTimePicker(),
+              ),
+              _buildToggle(
+                title: 'Compress',
+                value: _compress,
+                onChanged: (v) => setState(() => _compress = v),
+              ),
+              _buildToggle(
+                title: 'Include Device Info',
+                value: _includeDeviceInfo,
+                onChanged: (v) => setState(() => _includeDeviceInfo = v),
+              ),
+              const SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: CupertinoButton(
+                    color: widget.theme.accentColor,
+                    borderRadius: BorderRadius.circular(14),
+                    onPressed: () {
+                      Navigator.of(context).pop({
+                        'timeRange': _timeRange,
+                        'compress': _compress,
+                        'includeDeviceInfo': _includeDeviceInfo,
+                      });
+                    },
+                    child: const Text(
+                      'Export',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
                 ),
               ),
-              // Message
-              TextSpan(
-                text: entry.message,
-                style: TextStyle(
-                  color: theme.textColor,
-                ),
-              ),
+              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -1194,24 +1256,109 @@ class _CompactLogTile extends StatelessWidget {
     );
   }
 
-  String _getLevelAbbreviation(LogLevel level) {
-    switch (level) {
-      case LogLevel.verbose:
-        return 'V';
-      case LogLevel.debug:
-        return 'D';
-      case LogLevel.info:
-        return 'I';
-      case LogLevel.warning:
-        return 'W';
-      case LogLevel.error:
-        return 'E';
-      case LogLevel.fatal:
-        return 'F';
-    }
+  Widget _buildOption({
+    required String title,
+    required Widget trailing,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: widget.theme.separatorColor, width: 0.5),
+          ),
+        ),
+        child: Row(
+          children: [
+            Text(
+              title,
+              style: TextStyle(color: widget.theme.textColor, fontSize: 16),
+            ),
+            const Spacer(),
+            trailing,
+            const SizedBox(width: 8),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: widget.theme.separatorColor,
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  String _formatCompactTimestamp(DateTime timestamp) {
-    return DateFormat('HH:mm:ss').format(timestamp.toLocal());
+  Widget _buildToggle({
+    required String title,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: widget.theme.separatorColor, width: 0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text(
+            title,
+            style: TextStyle(color: widget.theme.textColor, fontSize: 16),
+          ),
+          const Spacer(),
+          CupertinoSwitch(
+            value: value,
+            activeTrackColor: widget.theme.accentColor,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTimePicker() {
+    showCupertinoModalPopup(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        actions: [
+          CupertinoActionSheetAction(
+            child: const Text('All Logs'),
+            onPressed: () {
+              setState(() => _timeRange = null);
+              Navigator.pop(context);
+            },
+          ),
+          CupertinoActionSheetAction(
+            child: const Text('Last 1 Hour'),
+            onPressed: () {
+              setState(() => _timeRange = const Duration(hours: 1));
+              Navigator.pop(context);
+            },
+          ),
+          CupertinoActionSheetAction(
+            child: const Text('Last 24 Hours'),
+            onPressed: () {
+              setState(() => _timeRange = const Duration(hours: 24));
+              Navigator.pop(context);
+            },
+          ),
+          CupertinoActionSheetAction(
+            child: const Text('Last 7 Days'),
+            onPressed: () {
+              setState(() => _timeRange = const Duration(days: 7));
+              Navigator.pop(context);
+            },
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          isDestructiveAction: true,
+          child: const Text('Cancel'),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+    );
   }
 }

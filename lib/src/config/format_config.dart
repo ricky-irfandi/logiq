@@ -25,8 +25,33 @@ enum LogFormat {
 /// Custom formatter function type.
 typedef CustomLogFormatter = String Function(LogEntry entry);
 
-/// Configuration for log formatting.
+/// Configuration for log output formatting.
+///
+/// Controls how log entries are serialized when written to files.
+/// Multiple format types are supported for different use cases.
+///
+/// ## Example
+///
+/// ```dart
+/// // JSON format (default, best for parsing)
+/// FormatConfig.json()
+///
+/// // Compact JSON (smaller file size)
+/// FormatConfig.compactJson()
+///
+/// // Human-readable plain text
+/// FormatConfig.plainText()
+///
+/// // CSV for spreadsheet analysis
+/// FormatConfig.csv()
+///
+/// // Custom format
+/// FormatConfig.custom((entry) => '${entry.level}: ${entry.message}')
+/// ```
 class FormatConfig {
+  /// Creates a format configuration with the specified options.
+  ///
+  /// Default format is JSON (NDJSON - one JSON object per line).
   const FormatConfig({
     this.type = LogFormat.json,
     this.customFormatter,
@@ -76,6 +101,7 @@ class FormatConfig {
   /// Whether to include sequence number in output.
   final bool includeSequenceNumber;
 
+  /// Creates a copy of this configuration with the specified fields replaced.
   FormatConfig copyWith({
     LogFormat? type,
     CustomLogFormatter? customFormatter,
