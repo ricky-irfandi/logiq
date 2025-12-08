@@ -1311,7 +1311,8 @@ class _AppleExportSheetState extends State<_AppleExportSheet> {
           const Spacer(),
           CupertinoSwitch(
             value: value,
-            activeTrackColor: widget.theme.accentColor,
+            // ignore: deprecated_member_use
+            activeColor: widget.theme.accentColor,
             onChanged: onChanged,
           ),
         ],

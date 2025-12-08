@@ -10,10 +10,6 @@ topics:
   - encryption
   - rotation
   - redaction
-  - stats
-  - export
-  - hooks
-  - context
   - retention
 
 platforms:
