@@ -174,8 +174,9 @@ class FileWriter {
 
         final linesToRemove =
             (remaining.length * params.trimPercent / 100).ceil();
-        final safeRemove =
-            linesToRemove >= remaining.length ? remaining.length - 10 : linesToRemove;
+        final safeRemove = linesToRemove >= remaining.length
+            ? remaining.length - 10
+            : linesToRemove;
         remaining = remaining.skip(safeRemove).toList();
       }
 

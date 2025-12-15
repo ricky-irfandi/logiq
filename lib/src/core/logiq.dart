@@ -376,17 +376,22 @@ class Logiq {
   /// ### Example
   ///
   /// ```dart
+  /// // With category
   /// Logiq.v('HTTP', 'Request headers', {
   ///   'headers': {'Authorization': 'Bearer ...'},
   ///   'url': 'https://api.example.com/users',
   /// });
+  ///
+  /// // Without category (uses default)
+  /// Logiq.v('Request headers');
   /// ```
   static void v(
-    String category,
     String message, [
+    dynamic categoryOrContext,
     Map<String, dynamic>? context,
   ]) {
-    _i._log(LogLevel.verbose, category, message, context);
+    final (cat, ctx) = _parseArgs(categoryOrContext, context, message);
+    _i._log(LogLevel.verbose, cat, ctx.$1, ctx.$2);
   }
 
   /// Logs a debug message.
@@ -400,17 +405,22 @@ class Logiq {
   /// ### Example
   ///
   /// ```dart
+  /// // With category
   /// Logiq.d('Auth', 'Token validation started', {
   ///   'userId': user.id,
   ///   'expiresAt': token.expiresAt.toIso8601String(),
   /// });
+  ///
+  /// // Without category (uses default)
+  /// Logiq.d('Token validation started');
   /// ```
   static void d(
-    String category,
     String message, [
+    dynamic categoryOrContext,
     Map<String, dynamic>? context,
   ]) {
-    _i._log(LogLevel.debug, category, message, context);
+    final (cat, ctx) = _parseArgs(categoryOrContext, context, message);
+    _i._log(LogLevel.debug, cat, ctx.$1, ctx.$2);
   }
 
   /// Logs an informational message.
@@ -424,18 +434,23 @@ class Logiq {
   /// ### Example
   ///
   /// ```dart
+  /// // With category
   /// Logiq.i('Payment', 'Transaction completed', {
   ///   'amount': 99.99,
   ///   'currency': 'USD',
   ///   'orderId': '12345',
   /// });
+  ///
+  /// // Without category (uses default)
+  /// Logiq.i('Transaction completed');
   /// ```
   static void i(
-    String category,
     String message, [
+    dynamic categoryOrContext,
     Map<String, dynamic>? context,
   ]) {
-    _i._log(LogLevel.info, category, message, context);
+    final (cat, ctx) = _parseArgs(categoryOrContext, context, message);
+    _i._log(LogLevel.info, cat, ctx.$1, ctx.$2);
   }
 
   /// Logs a warning message.
@@ -449,17 +464,22 @@ class Logiq {
   /// ### Example
   ///
   /// ```dart
+  /// // With category
   /// Logiq.w('Cache', 'Cache miss, fetching from network', {
   ///   'key': 'user_profile_123',
   ///   'reason': 'expired',
   /// });
+  ///
+  /// // Without category (uses default)
+  /// Logiq.w('Cache miss, fetching from network');
   /// ```
   static void w(
-    String category,
     String message, [
+    dynamic categoryOrContext,
     Map<String, dynamic>? context,
   ]) {
-    _i._log(LogLevel.warning, category, message, context);
+    final (cat, ctx) = _parseArgs(categoryOrContext, context, message);
+    _i._log(LogLevel.warning, cat, ctx.$1, ctx.$2);
   }
 
   /// Logs an error message.
@@ -474,12 +494,16 @@ class Logiq {
   /// ### Example
   ///
   /// ```dart
+  /// // With category
   /// Logiq.e('Network', 'API call failed', {
   ///   'endpoint': '/api/users',
   ///   'statusCode': 500,
   ///   'error': error.toString(),
   ///   'stackTrace': stackTrace.toString(),
   /// });
+  ///
+  /// // Without category (uses default)
+  /// Logiq.e('API call failed');
   /// ```
   ///
   /// ### Behavior
@@ -487,11 +511,12 @@ class Logiq {
   /// Error and Fatal logs trigger **immediate flush** to ensure critical
   /// events are persisted even if the app crashes.
   static void e(
-    String category,
     String message, [
+    dynamic categoryOrContext,
     Map<String, dynamic>? context,
   ]) {
-    _i._log(LogLevel.error, category, message, context);
+    final (cat, ctx) = _parseArgs(categoryOrContext, context, message);
+    _i._log(LogLevel.error, cat, ctx.$1, ctx.$2);
   }
 
   /// Logs a fatal message (highest severity).
@@ -506,11 +531,15 @@ class Logiq {
   /// ### Example
   ///
   /// ```dart
+  /// // With category
   /// Logiq.f('DB', 'Database corruption detected', {
   ///   'file': dbFile.path,
   ///   'size': dbFile.lengthSync(),
   ///   'error': exception.toString(),
   /// });
+  ///
+  /// // Without category (uses default)
+  /// Logiq.f('Database corruption detected');
   /// ```
   ///
   /// ### Behavior
@@ -518,11 +547,47 @@ class Logiq {
   /// Error and Fatal logs trigger **immediate flush** to ensure critical
   /// events are persisted even if the app crashes.
   static void f(
-    String category,
     String message, [
+    dynamic categoryOrContext,
     Map<String, dynamic>? context,
   ]) {
-    _i._log(LogLevel.fatal, category, message, context);
+    final (cat, ctx) = _parseArgs(categoryOrContext, context, message);
+    _i._log(LogLevel.fatal, cat, ctx.$1, ctx.$2);
+  }
+
+  /// Parses the flexible arguments for log methods.
+  ///
+  /// Supports multiple calling patterns:
+  /// - `Logiq.i('message')` - uses default category
+  /// - `Logiq.i('message', {'key': 'value'})` - message with context
+  /// - `Logiq.i('category', 'message')` - with category (backward compatible)
+  /// - `Logiq.i('category', 'message', context)` - full usage
+  ///
+  /// Returns a tuple of (category, (message, context)).
+  static (String, (String, Map<String, dynamic>?)) _parseArgs(
+    dynamic categoryOrContext,
+    Map<String, dynamic>? context,
+    String firstArg,
+  ) {
+    // Case 1: Only message provided - Logiq.i('message')
+    if (categoryOrContext == null) {
+      return (_i._config.defaultCategory, (firstArg, null));
+    }
+
+    // Case 2: Category and message provided - Logiq.i('category', 'message')
+    // First arg is category, second arg (categoryOrContext) is message
+    if (categoryOrContext is String) {
+      return (firstArg, (categoryOrContext, context));
+    }
+
+    // Case 3: Message and context provided - Logiq.i('message', {'key': 'value'})
+    // First arg is message, second arg is context
+    if (categoryOrContext is Map<String, dynamic>) {
+      return (_i._config.defaultCategory, (firstArg, categoryOrContext));
+    }
+
+    // Fallback: treat first arg as message only
+    return (_i._config.defaultCategory, (firstArg, null));
   }
 
   void _log(
@@ -1049,13 +1114,16 @@ class Logiq {
         int entryCount = 0;
         try {
           final content = await file.readAsString();
-          entryCount =
-              content.split('\n').where((line) => line.trim().isNotEmpty).length;
+          entryCount = content
+              .split('\n')
+              .where((line) => line.trim().isNotEmpty)
+              .length;
         } catch (_) {
           entryCount = 0;
         }
         totalEntries += entryCount;
-        fileInfos.add(_LogFileInfo(file: file, stat: stat, entryCount: entryCount));
+        fileInfos
+            .add(_LogFileInfo(file: file, stat: stat, entryCount: entryCount));
       }
 
       // Sort oldest first

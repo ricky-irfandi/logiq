@@ -64,6 +64,7 @@ class LogConfig {
     this.hooks,
     this.debugViewer = const DebugViewerConfig(),
     this.directory,
+    this.defaultCategory = 'DEFAULT',
   });
 
   /// Creates configuration optimized for release/production builds.
@@ -171,6 +172,12 @@ class LogConfig {
   /// Custom log directory (null = default app directory).
   final String? directory;
 
+  /// Default category for log entries when not specified.
+  ///
+  /// Used when calling log methods without providing a category.
+  /// Defaults to 'DEFAULT'.
+  final String defaultCategory;
+
   /// Creates a copy of this configuration with the specified fields replaced.
   ///
   /// All parameters are optional. Only provided parameters will be updated;
@@ -190,6 +197,7 @@ class LogConfig {
     LogHooks? hooks,
     DebugViewerConfig? debugViewer,
     String? directory,
+    String? defaultCategory,
   }) {
     return LogConfig(
       minLevel: minLevel ?? this.minLevel,
@@ -206,6 +214,7 @@ class LogConfig {
       hooks: hooks ?? this.hooks,
       debugViewer: debugViewer ?? this.debugViewer,
       directory: directory ?? this.directory,
+      defaultCategory: defaultCategory ?? this.defaultCategory,
     );
   }
 }
