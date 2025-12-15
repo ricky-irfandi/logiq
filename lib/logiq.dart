@@ -38,3 +38,6 @@ export 'src/export/export_result.dart';
 // UI
 export 'src/ui/log_viewer_screen.dart';
 export 'src/ui/log_viewer_theme.dart';
+
+// Navigation
+export 'src/navigation/logiq_navigator_observer.dart';

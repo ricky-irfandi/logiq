@@ -16,6 +16,7 @@ import '../stats/log_stats.dart';
 import '../security/redaction_pattern.dart';
 import '../ui/log_viewer_screen.dart';
 import '../ui/debug_overlay_button.dart';
+import '../navigation/logiq_navigator_observer.dart';
 
 /// Zero-impact, fire-and-forget local logging system for Flutter.
 ///
@@ -1446,6 +1447,57 @@ class Logiq {
 
   /// Get current config.
   static LogConfig get config => _i._config;
+
+  // ══════════════════════════════════════════════════════════════════════
+  // NAVIGATION OBSERVER
+  // ══════════════════════════════════════════════════════════════════════
+
+  static LogiqNavigatorObserver? _navigationObserver;
+
+  /// Returns a [NavigatorObserver] that logs navigation events.
+  ///
+  /// Use this with MaterialApp or CupertinoApp to automatically log
+  /// navigation events (push, pop, replace, remove) with detailed context.
+  ///
+  /// ### Example
+  ///
+  /// ```dart
+  /// MaterialApp(
+  ///   navigatorObservers: [Logiq.navigationObserver],
+  ///   home: HomePage(),
+  /// )
+  /// ```
+  ///
+  /// ### Logged Data
+  ///
+  /// Each navigation event logs:
+  /// - **action**: push, pop, replace, or remove
+  /// - **route**: The current/new route name
+  /// - **previousRoute**: The previous route name
+  /// - **routeType**: The route class (e.g., MaterialPageRoute)
+  /// - **arguments**: Route arguments (if present)
+  ///
+  /// ### Custom Configuration
+  ///
+  /// For custom log level or category, create your own observer:
+  ///
+  /// ```dart
+  /// MaterialApp(
+  ///   navigatorObservers: [
+  ///     LogiqNavigatorObserver(
+  ///       logLevel: LogLevel.debug,
+  ///       category: 'NAVIGATION',
+  ///     ),
+  ///   ],
+  /// )
+  /// ```
+  ///
+  /// See also:
+  /// - [LogiqNavigatorObserver] for custom configuration options
+  static LogiqNavigatorObserver get navigationObserver {
+    _navigationObserver ??= LogiqNavigatorObserver();
+    return _navigationObserver!;
+  }
 
   // ══════════════════════════════════════════════════════════════════════
   // CLEANUP

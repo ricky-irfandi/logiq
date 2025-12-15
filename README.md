@@ -43,7 +43,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  logiq: ^1.0.0-beta.2
+  logiq: ^1.0.0-beta.3
 ```
 
 ### Basic Usage
@@ -428,6 +428,37 @@ if (Logiq.isEnabled) {
 }
 ```
 
+### Navigation Observer
+
+Automatically log navigation events with `Logiq.navigationObserver`:
+
+```dart
+MaterialApp(
+  navigatorObservers: [Logiq.navigationObserver],
+  home: const HomePage(),
+)
+```
+
+This logs push, pop, replace, and remove events with context:
+- **route**: The route name
+- **previousRoute**: The previous route
+- **routeType**: MaterialPageRoute, etc.
+- **arguments**: Route arguments (if any)
+
+**Custom configuration:**
+
+```dart
+MaterialApp(
+  navigatorObservers: [
+    LogiqNavigatorObserver(
+      logLevel: LogLevel.debug,
+      category: 'NAVIGATION',
+      logRouteArguments: true,
+    ),
+  ],
+)
+```
+
 ### Context Providers
 
 Auto-inject data into every log:
@@ -480,32 +511,6 @@ await Logiq.clear();
 
 // Clear logs older than 7 days
 await Logiq.clearOlderThan(const Duration(days: 7));
-```
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────┐
-│              MAIN ISOLATE (UI Thread)           │
-│                                                 │
-│  Logiq.i('BID', 'User placed bid') ⚡ INSTANT  │
-│           ↓                                     │
-│  Ring Buffer (500 entries) ← Add entry         │
-│           ↓                                     │
-│  [Every 30s OR buffer full OR critical log]    │
-│           ↓                                     │
-│  compute(FileWriter.writeEntries, params)      │
-└─────────────────────┬───────────────────────────┘
-                      ↓
-┌─────────────────────────────────────────────────┐
-│         FILE WRITER ISOLATE (Background)        │
-│                                                 │
-│  1. Format logs (JSON/CSV/etc)                 │
-│  2. Redact PII (emails, phones, etc)           │
-│  3. Encrypt (AES-256-GCM)                      │
-│  4. Write to disk                               │
-│  5. Rotate files if needed                      │
-└─────────────────────────────────────────────────┘
 ```
 
 ## 📦 Complete Example
