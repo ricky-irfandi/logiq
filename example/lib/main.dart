@@ -72,6 +72,7 @@ class AppColors {
   // Primary gradient
   static const primary = Color(0xFF007AFF);
   static const primaryLight = Color(0xFF5AC8FA);
+  static const primaryShadow = Color(0x4D007AFF); // 0.3 opacity
 
   // Background
   static const background = Color(0xFFF2F2F7);
@@ -89,6 +90,20 @@ class AppColors {
   static const purple = Color(0xFFAF52DE);
   static const teal = Color(0xFF5AC8FA);
   static const indigo = Color(0xFF5856D6);
+
+  // Pre-computed opacity colors
+  static const shadowLight = Color(0x0A000000); // black 0.04
+  static const shadowMedium = Color(0x1A000000); // black 0.1
+  static const divider = Color(0x0F000000); // black 0.06
+  static const greenLight = Color(0x2634C759); // green 0.15
+  static const tealLight = Color(0x265AC8FA); // teal 0.15
+}
+
+// Extension for dynamic color opacity without deprecation warnings
+extension ColorOpacity on Color {
+  Color withOpacityValue(double opacity) {
+    return Color.fromRGBO(r.toInt(), g.toInt(), b.toInt(), opacity);
+  }
 }
 
 class LogiqDemoApp extends StatelessWidget {
@@ -325,11 +340,11 @@ class _HomePageState extends State<HomePage> {
                   colors: [AppColors.primary, AppColors.primaryLight],
                 ),
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: [
+                boxShadow: const [
                   BoxShadow(
-                    color: AppColors.primary.withOpacity(0.3),
+                    color: AppColors.primaryShadow,
                     blurRadius: 12,
-                    offset: const Offset(0, 4),
+                    offset: Offset(0, 4),
                   ),
                 ],
               ),
@@ -348,11 +363,11 @@ class _HomePageState extends State<HomePage> {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: AppColors.shadowLight,
             blurRadius: 20,
-            offset: const Offset(0, 4),
+            offset: Offset(0, 4),
           ),
         ],
       ),
@@ -362,12 +377,12 @@ class _HomePageState extends State<HomePage> {
             width: 60,
             height: 60,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
+              gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  AppColors.green.withOpacity(0.15),
-                  AppColors.teal.withOpacity(0.15),
+                  AppColors.greenLight,
+                  AppColors.tealLight,
                 ],
               ),
               borderRadius: BorderRadius.circular(16),
@@ -416,11 +431,11 @@ class _HomePageState extends State<HomePage> {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: AppColors.shadowLight,
             blurRadius: 20,
-            offset: const Offset(0, 4),
+            offset: Offset(0, 4),
           ),
         ],
       ),
@@ -433,7 +448,7 @@ class _HomePageState extends State<HomePage> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
+                  color: color.withOpacityValue(0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: color, size: 22),
@@ -476,10 +491,10 @@ class _HomePageState extends State<HomePage> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
-                        color: item.color.withOpacity(0.1),
+                        color: item.color.withOpacityValue(0.1),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: item.color.withOpacity(0.2),
+                          color: item.color.withOpacityValue(0.2),
                         ),
                       ),
                       child: Center(
@@ -508,11 +523,11 @@ class _HomePageState extends State<HomePage> {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: AppColors.shadowLight,
             blurRadius: 20,
-            offset: const Offset(0, 4),
+            offset: Offset(0, 4),
           ),
         ],
       ),
@@ -615,11 +630,11 @@ class _HomePageState extends State<HomePage> {
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(24),
-            boxShadow: [
+            boxShadow: const [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
+                color: AppColors.shadowMedium,
                 blurRadius: 30,
-                offset: const Offset(0, 10),
+                offset: Offset(0, 10),
               ),
             ],
           ),
@@ -714,7 +729,7 @@ class _ActionTile extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
+                color: color.withOpacityValue(0.12),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: color, size: 20),
@@ -750,7 +765,7 @@ class _Divider extends StatelessWidget {
     return Container(
       height: 0.5,
       margin: const EdgeInsets.only(left: 70),
-      color: Colors.black.withOpacity(0.06),
+      color: AppColors.divider,
     );
   }
 }
