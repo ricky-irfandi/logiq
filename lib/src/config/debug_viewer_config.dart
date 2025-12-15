@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../ui/log_viewer_theme.dart';
+import 'debug_tab.dart';
 
 /// Configuration for the built-in debug log viewer UI.
 ///
@@ -28,6 +29,7 @@ class DebugViewerConfig {
     this.theme = const LogViewerTheme(),
     this.showFloatingButton = true,
     this.floatingButtonPosition = FloatingButtonPosition.bottomRight,
+    this.tabs = const [],
   });
 
   /// Whether debug viewer is enabled.
@@ -42,17 +44,33 @@ class DebugViewerConfig {
   /// Position of floating button.
   final FloatingButtonPosition floatingButtonPosition;
 
+  /// Custom tabs for organizing logs by category.
+  ///
+  /// When empty (default), shows all logs in a single view.
+  /// When configured, displays a tab bar with custom tabs plus an "All" tab.
+  ///
+  /// Example:
+  /// ```dart
+  /// tabs: [
+  ///   DebugTab(name: 'Network', categories: ['API', 'HTTP']),
+  ///   DebugTab(name: 'Database', categories: ['DB', 'SQL']),
+  /// ]
+  /// ```
+  final List<DebugTab> tabs;
+
   /// Creates a copy of this configuration with the specified fields replaced.
   DebugViewerConfig copyWith({
     bool? enabled,
     LogViewerTheme? theme,
     bool? showFloatingButton,
     FloatingButtonPosition? floatingButtonPosition,
+    List<DebugTab>? tabs,
   }) {
     return DebugViewerConfig(
       enabled: enabled ?? this.enabled,
       theme: theme ?? this.theme,
       showFloatingButton: showFloatingButton ?? this.showFloatingButton,
+      tabs: tabs ?? this.tabs,
       floatingButtonPosition:
           floatingButtonPosition ?? this.floatingButtonPosition,
     );

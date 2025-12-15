@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../config/format_config.dart';
+import '../config/debug_tab.dart';
 import '../core/log_entry.dart';
 import '../core/log_level.dart';
 import '../core/logiq.dart';
@@ -33,10 +34,15 @@ class LogViewerScreen extends StatefulWidget {
     super.key,
     required this.logDirectory,
     this.theme = const LogViewerTheme(),
+    this.tabs = const [],
   });
 
   final String logDirectory;
   final LogViewerTheme theme;
+
+  /// Custom tabs for organizing logs by category.
+  /// Empty list = single view with all logs (default behavior).
+  final List<DebugTab> tabs;
 
   @override
   State<LogViewerScreen> createState() => _LogViewerScreenState();
@@ -59,6 +65,12 @@ class _LogViewerScreenState extends State<LogViewerScreen>
   Timer? _refreshTimer;
   late AnimationController _fadeController;
 
+  // Tab state
+  TabController? _tabController;
+  int _selectedTabIndex = 0;
+
+  bool get _hasTabs => widget.tabs.isNotEmpty;
+
   @override
   void initState() {
     super.initState();
@@ -66,10 +78,28 @@ class _LogViewerScreenState extends State<LogViewerScreen>
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
+
+    // Initialize tab controller if tabs are configured
+    if (_hasTabs) {
+      _tabController = TabController(
+        length: widget.tabs.length + 1, // +1 for "All" tab
+        vsync: this,
+      );
+      _tabController!.addListener(_onTabChanged);
+    }
+
     _loadLogs();
     _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (mounted) _loadLogs(showLoading: false);
     });
+  }
+
+  void _onTabChanged() {
+    if (_tabController != null && !_tabController!.indexIsChanging) {
+      setState(() {
+        _selectedTabIndex = _tabController!.index;
+      });
+    }
   }
 
   Future<void> _loadLogs({bool showLoading = true}) async {
@@ -322,6 +352,12 @@ class _LogViewerScreenState extends State<LogViewerScreen>
 
   List<LogEntry> get _filteredEntries {
     return _logEntries.where((entry) {
+      // Filter by selected category tab (if tabs configured and not on "All" tab)
+      if (_hasTabs && _selectedTabIndex > 0) {
+        final selectedTab = widget.tabs[_selectedTabIndex - 1];
+        if (!selectedTab.categorySet.contains(entry.category)) return false;
+      }
+
       if (!_selectedLevels.contains(entry.level)) return false;
       if (_searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
@@ -343,11 +379,107 @@ class _LogViewerScreenState extends State<LogViewerScreen>
           child: Column(
             children: [
               _buildHeader(),
+              if (_hasTabs) _buildCategoryTabs(),
               _buildSearchBar(),
               _buildFilterChips(),
               Expanded(child: _buildBody()),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryTabs() {
+    final theme = _isDarkMode ? widget.theme : LogViewerTheme.light;
+    return SizedBox(
+      height: 52,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+        children: [
+          // "All" tab
+          _buildCategoryTabItem(
+            label: 'All',
+            icon: Icons.list_rounded,
+            isSelected: _selectedTabIndex == 0,
+            theme: theme,
+            onTap: () {
+              HapticFeedback.lightImpact();
+              _tabController?.animateTo(0);
+              setState(() => _selectedTabIndex = 0);
+            },
+          ),
+          const SizedBox(width: 8),
+          // Custom category tabs
+          ...widget.tabs.asMap().entries.map((entry) {
+            final index = entry.key + 1; // +1 for "All" tab
+            final tab = entry.value;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _buildCategoryTabItem(
+                label: tab.name,
+                icon: tab.icon,
+                isSelected: _selectedTabIndex == index,
+                theme: theme,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  _tabController?.animateTo(index);
+                  setState(() => _selectedTabIndex = index);
+                },
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryTabItem({
+    required String label,
+    IconData? icon,
+    required bool isSelected,
+    required LogViewerTheme theme,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? theme.accentColor.withOpacityCompat(0.15)
+              : theme.surfaceColor,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected
+                ? theme.accentColor.withOpacityCompat(0.3)
+                : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(
+                icon,
+                size: 16,
+                color:
+                    isSelected ? theme.accentColor : theme.secondaryTextColor,
+              ),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                color:
+                    isSelected ? theme.accentColor : theme.secondaryTextColor,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -760,6 +892,8 @@ class _LogViewerScreenState extends State<LogViewerScreen>
     _scrollController.dispose();
     _searchController.dispose();
     _fadeController.dispose();
+    _tabController?.removeListener(_onTabChanged);
+    _tabController?.dispose();
     super.dispose();
   }
 }

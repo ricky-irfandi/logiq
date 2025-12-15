@@ -1435,6 +1435,7 @@ class Logiq {
         builder: (_) => LogViewerScreen(
           logDirectory: _i._logDirectory,
           theme: _i._config.debugViewer.theme,
+          tabs: _i._config.debugViewer.tabs,
         ),
       ),
     );

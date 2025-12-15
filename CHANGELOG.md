@@ -1,3 +1,10 @@
+## 1.0.0-beta.3
+
+* Added category tabs for debug UI - organize logs into custom tabs by category
+* New `DebugTab` class for configuring tabs with name, categories, and optional icon
+* `DebugViewerConfig` now accepts a `tabs` parameter for tab configuration
+* Backwards compatible - empty tabs shows current single-view behavior
+
 ## 1.0.0-beta.2
 
 * Fixed deprecated `withOpacity` warning with compatibility extension for Flutter 3.24+

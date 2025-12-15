@@ -325,6 +325,40 @@ debugViewer: DebugViewerConfig(
 
 **Note:** Users can toggle between light and dark mode at runtime using the sun/moon button in the viewer.
 
+### Category Tabs
+
+Organize logs into custom tabs for easier navigation:
+
+```dart
+debugViewer: DebugViewerConfig(
+  enabled: true,
+  tabs: [
+    DebugTab(
+      name: 'Network',
+      categories: ['API', 'HTTP', 'Socket'],
+      icon: Icons.wifi,
+    ),
+    DebugTab(
+      name: 'Database',
+      categories: ['DB', 'SQL'],
+      icon: Icons.storage,
+    ),
+    DebugTab(
+      name: 'Auth',
+      categories: ['Auth', 'Login'],
+      icon: Icons.lock,
+    ),
+  ],
+)
+```
+
+**Features:**
+- Automatic "All" tab shows every log
+- Filter logs by category per tab
+- Optional icons for visual identification
+- Horizontal scroll for many tabs
+- Works with level filters and search
+
 ## 📤 Export
 
 ```dart

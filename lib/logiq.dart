@@ -13,6 +13,7 @@ export 'src/config/rotation_config.dart';
 export 'src/config/encryption_config.dart';
 export 'src/config/retention_config.dart';
 export 'src/config/debug_viewer_config.dart';
+export 'src/config/debug_tab.dart';
 
 // Security
 export 'src/security/redaction_pattern.dart';
