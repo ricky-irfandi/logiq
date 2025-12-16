@@ -256,10 +256,58 @@ class _HomePageState extends State<HomePage> {
                             () => _log(
                                 () => Logiq.d('Navigation', 'Push /details'))),
                         _LogItem(
-                            'Render',
-                            AppColors.textSecondary,
-                            () => _log(() => Logiq.v(
-                                'UI', 'Widget rebuilt', {'duration': '2ms'}))),
+                            'Nested',
+                            AppColors.indigo,
+                            () => _log(() => Logiq.i(
+                                  'API',
+                                  'Complex response received',
+                                  {
+                                    'user': {
+                                      'id': 12345,
+                                      'name': 'John Doe',
+                                      'email': 'john@example.com',
+                                      'profile': {
+                                        'avatar':
+                                            'https://example.com/avatar.jpg',
+                                        'bio': 'Flutter developer',
+                                        'settings': {
+                                          'theme': 'dark',
+                                          'notifications': true,
+                                          'language': 'en',
+                                        },
+                                      },
+                                      'roles': ['admin', 'editor', 'viewer'],
+                                    },
+                                    'metadata': {
+                                      'timestamp': '2025-12-16T09:45:00Z',
+                                      'version': '2.1.0',
+                                      'requestId': 'req_abc123xyz',
+                                    },
+                                    'items': [
+                                      {
+                                        'id': 1,
+                                        'name': 'Item One',
+                                        'price': 19.99
+                                      },
+                                      {
+                                        'id': 2,
+                                        'name': 'Item Two',
+                                        'price': 29.99
+                                      },
+                                      {
+                                        'id': 3,
+                                        'name': 'Item Three',
+                                        'price': 39.99
+                                      },
+                                    ],
+                                    'pagination': {
+                                      'page': 1,
+                                      'limit': 10,
+                                      'total': 156,
+                                      'hasMore': true,
+                                    },
+                                  },
+                                ))),
                       ],
                     ),
                     const SizedBox(height: 28),

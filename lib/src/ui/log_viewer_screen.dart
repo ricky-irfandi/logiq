@@ -1108,22 +1108,29 @@ class _AppleCompactTile extends StatelessWidget {
 }
 
 // Detail sheet
-class _AppleLogDetailSheet extends StatelessWidget {
+class _AppleLogDetailSheet extends StatefulWidget {
   const _AppleLogDetailSheet({required this.entry, required this.theme});
 
   final LogEntry entry;
   final LogViewerTheme theme;
 
   @override
+  State<_AppleLogDetailSheet> createState() => _AppleLogDetailSheetState();
+}
+
+class _AppleLogDetailSheetState extends State<_AppleLogDetailSheet> {
+  bool _isTreeView = true;
+
+  @override
   Widget build(BuildContext context) {
-    final color = theme.colorForLevel(entry.level.value);
+    final color = widget.theme.colorForLevel(widget.entry.level.value);
 
     return Material(
       color: Colors.transparent,
       child: Container(
-        height: MediaQuery.of(context).size.height * 0.7,
+        height: MediaQuery.of(context).size.height * 0.9,
         decoration: BoxDecoration(
-          color: theme.surfaceColor,
+          color: widget.theme.surfaceColor,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
@@ -1133,7 +1140,7 @@ class _AppleLogDetailSheet extends StatelessWidget {
               width: 36,
               height: 5,
               decoration: BoxDecoration(
-                color: theme.separatorColor,
+                color: widget.theme.separatorColor,
                 borderRadius: BorderRadius.circular(3),
               ),
             ),
@@ -1149,7 +1156,7 @@ class _AppleLogDetailSheet extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    entry.level.name.toUpperCase(),
+                    widget.entry.level.name.toUpperCase(),
                     style: TextStyle(
                       color: color,
                       fontSize: 14,
@@ -1157,85 +1164,173 @@ class _AppleLogDetailSheet extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
+                  // Tree/JSON segmented toggle
+                  if (widget.entry.context != null)
+                    Container(
+                      decoration: BoxDecoration(
+                        color: widget.theme.backgroundColor,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              setState(() => _isTreeView = true);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _isTreeView
+                                    ? widget.theme.accentColor
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'Tree',
+                                style: TextStyle(
+                                  color: _isTreeView
+                                      ? Colors.white
+                                      : widget.theme.secondaryTextColor,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              setState(() => _isTreeView = false);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: !_isTreeView
+                                    ? widget.theme.accentColor
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'JSON',
+                                style: TextStyle(
+                                  color: !_isTreeView
+                                      ? Colors.white
+                                      : widget.theme.secondaryTextColor,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(width: 8),
                   CupertinoButton(
                     padding: EdgeInsets.zero,
                     onPressed: () {
                       Clipboard.setData(
-                        ClipboardData(text: jsonEncode(entry.toJson())),
+                        ClipboardData(text: jsonEncode(widget.entry.toJson())),
                       );
                       HapticFeedback.mediumImpact();
                     },
                     child: Icon(
                       Icons.copy_rounded,
-                      color: theme.accentColor,
+                      color: widget.theme.accentColor,
                       size: 22,
                     ),
                   ),
                 ],
               ),
             ),
-            Divider(color: theme.separatorColor, height: 1),
+            Divider(color: widget.theme.separatorColor, height: 1),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
                   _DetailItem(
                     label: 'Category',
-                    value: entry.category,
-                    theme: theme,
+                    value: widget.entry.category,
+                    theme: widget.theme,
                   ),
                   _DetailItem(
                     label: 'Time',
                     value: DateFormat('MMM dd, yyyy HH:mm:ss.SSS')
-                        .format(entry.timestamp.toLocal()),
-                    theme: theme,
+                        .format(widget.entry.timestamp.toLocal()),
+                    theme: widget.theme,
                   ),
                   const SizedBox(height: 20),
                   Text(
                     'Message',
                     style: TextStyle(
-                      color: theme.secondaryTextColor,
+                      color: widget.theme.secondaryTextColor,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 8),
                   SelectableText(
-                    entry.message,
+                    widget.entry.message,
                     style: TextStyle(
-                      color: theme.textColor,
+                      color: widget.theme.textColor,
                       fontSize: 15,
                       height: 1.5,
                       decoration: TextDecoration.none,
                     ),
                   ),
-                  if (entry.context != null) ...[
+                  if (widget.entry.context != null) ...[
                     const SizedBox(height: 24),
-                    Text(
-                      'Context',
-                      style: TextStyle(
-                        color: theme.secondaryTextColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          'Context',
+                          style: TextStyle(
+                            color: widget.theme.secondaryTextColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _isTreeView ? '(Tree View)' : '(JSON)',
+                          style: TextStyle(
+                            color: widget.theme.secondaryTextColor
+                                .withOpacityCompat(0.6),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: theme.backgroundColor,
+                        color: widget.theme.backgroundColor,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: SelectableText(
-                        const JsonEncoder.withIndent('  ')
-                            .convert(entry.context),
-                        style: TextStyle(
-                          color: theme.textColor,
-                          fontFamily: 'monospace',
-                          fontSize: 12,
-                          decoration: TextDecoration.none,
-                        ),
-                      ),
+                      child: _isTreeView
+                          ? _JsonTreeView(
+                              data: widget.entry.context,
+                              theme: widget.theme,
+                            )
+                          : SelectableText(
+                              const JsonEncoder.withIndent('  ')
+                                  .convert(widget.entry.context),
+                              style: TextStyle(
+                                color: widget.theme.textColor,
+                                fontFamily: 'monospace',
+                                fontSize: 12,
+                                decoration: TextDecoration.none,
+                              ),
+                            ),
                     ),
                   ],
                 ],
@@ -1245,6 +1340,234 @@ class _AppleLogDetailSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Tree view widget for displaying JSON data hierarchically
+class _JsonTreeView extends StatelessWidget {
+  const _JsonTreeView({required this.data, required this.theme});
+
+  final dynamic data;
+  final LogViewerTheme theme;
+
+  @override
+  Widget build(BuildContext context) {
+    if (data == null) {
+      return Text(
+        'null',
+        style: TextStyle(
+          color: theme.secondaryTextColor,
+          fontFamily: 'monospace',
+          fontSize: 12,
+        ),
+      );
+    }
+
+    if (data is Map) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final entry in (data as Map).entries)
+            _JsonTreeNode(
+              keyName: entry.key.toString(),
+              value: entry.value,
+              theme: theme,
+            ),
+        ],
+      );
+    }
+
+    if (data is List) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < (data as List).length; i++)
+            _JsonTreeNode(
+              keyName: '[$i]',
+              value: data[i],
+              theme: theme,
+            ),
+        ],
+      );
+    }
+
+    return Text(
+      data.toString(),
+      style: TextStyle(
+        color: theme.textColor,
+        fontFamily: 'monospace',
+        fontSize: 12,
+      ),
+    );
+  }
+}
+
+/// A single node in the JSON tree
+class _JsonTreeNode extends StatefulWidget {
+  const _JsonTreeNode({
+    required this.keyName,
+    required this.value,
+    required this.theme,
+    this.depth = 0,
+  });
+
+  final String keyName;
+  final dynamic value;
+  final LogViewerTheme theme;
+  final int depth;
+
+  @override
+  State<_JsonTreeNode> createState() => _JsonTreeNodeState();
+}
+
+class _JsonTreeNodeState extends State<_JsonTreeNode> {
+  bool _isExpanded = true;
+
+  bool get _isExpandable =>
+      widget.value is Map || (widget.value is List && widget.value.isNotEmpty);
+
+  Color get _valueColor {
+    final value = widget.value;
+    if (value == null) return widget.theme.secondaryTextColor;
+    if (value is String) return const Color(0xFF30D158); // Green for strings
+    if (value is num) return const Color(0xFF64D2FF); // Cyan for numbers
+    if (value is bool) return const Color(0xFFFF9F0A); // Orange for booleans
+    return widget.theme.textColor;
+  }
+
+  String get _typeIndicator {
+    final value = widget.value;
+    if (value is Map) {
+      return '{${value.length}}';
+    }
+    if (value is List) {
+      return '[${value.length}]';
+    }
+    return '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final indent = widget.depth * 16.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: _isExpandable
+              ? () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _isExpanded = !_isExpanded);
+                }
+              : null,
+          child: Padding(
+            padding: EdgeInsets.only(left: indent, top: 4, bottom: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Expand/collapse icon
+                if (_isExpandable)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Icon(
+                      _isExpanded
+                          ? Icons.keyboard_arrow_down_rounded
+                          : Icons.keyboard_arrow_right_rounded,
+                      size: 16,
+                      color: widget.theme.secondaryTextColor,
+                    ),
+                  )
+                else
+                  const SizedBox(width: 20),
+                // Key name
+                Text(
+                  widget.keyName,
+                  style: TextStyle(
+                    color: widget.theme.accentColor,
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  ': ',
+                  style: TextStyle(
+                    color: widget.theme.secondaryTextColor,
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                  ),
+                ),
+                // Value or type indicator
+                if (_isExpandable)
+                  Text(
+                    _typeIndicator,
+                    style: TextStyle(
+                      color: widget.theme.secondaryTextColor,
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: Text(
+                      _formatValue(widget.value),
+                      style: TextStyle(
+                        color: _valueColor,
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        // Children (if expanded)
+        if (_isExpandable && _isExpanded) _buildChildren(),
+      ],
+    );
+  }
+
+  Widget _buildChildren() {
+    final value = widget.value;
+
+    if (value is Map) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final entry in value.entries)
+            _JsonTreeNode(
+              keyName: entry.key.toString(),
+              value: entry.value,
+              theme: widget.theme,
+              depth: widget.depth + 1,
+            ),
+        ],
+      );
+    }
+
+    if (value is List) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < value.length; i++)
+            _JsonTreeNode(
+              keyName: '[$i]',
+              value: value[i],
+              theme: widget.theme,
+              depth: widget.depth + 1,
+            ),
+        ],
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  String _formatValue(dynamic value) {
+    if (value == null) return 'null';
+    if (value is String) return '"$value"';
+    return value.toString();
   }
 }
 
@@ -1377,9 +1700,12 @@ class _AppleExportSheetState extends State<_AppleExportSheet> {
                         'includeDeviceInfo': _includeDeviceInfo,
                       });
                     },
-                    child: const Text(
+                    child: Text(
                       'Export',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: widget.theme.backgroundColor,
+                      ),
                     ),
                   ),
                 ),
