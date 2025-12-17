@@ -1,6 +1,6 @@
 name: logiq
 description: Zero-impact, fire-and-forget local logging system for Flutter. Enterprise-grade with encryption, rotation, and debug UI.
-version: 1.0.0-beta.3
+version: 1.0.0-beta.4
 homepage: https://github.com/ricky-irfandi/logiq
 repository: https://github.com/ricky-irfandi/logiq
 issue_tracker: https://github.com/ricky-irfandi/logiq/issues

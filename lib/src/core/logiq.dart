@@ -17,6 +17,7 @@ import '../security/redaction_pattern.dart';
 import '../ui/log_viewer_screen.dart';
 import '../ui/debug_overlay_button.dart';
 import '../navigation/logiq_navigator_observer.dart';
+import '../network/network_log.dart';
 
 /// Zero-impact, fire-and-forget local logging system for Flutter.
 ///
@@ -1497,6 +1498,108 @@ class Logiq {
   static LogiqNavigatorObserver get navigationObserver {
     _navigationObserver ??= LogiqNavigatorObserver();
     return _navigationObserver!;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // NETWORK LOGGING
+  // ══════════════════════════════════════════════════════════════════════
+
+  /// Logs a network request/response in a single call.
+  ///
+  /// This is a convenience method for quick network logging. For more
+  /// detailed logging, use [logRequest] and [logResponse] separately.
+  ///
+  /// ```dart
+  /// // In your HTTP interceptor:
+  /// Logiq.network(
+  ///   method: 'GET',
+  ///   url: 'https://api.example.com/users',
+  ///   statusCode: 200,
+  ///   duration: Duration(milliseconds: 234),
+  /// );
+  /// ```
+  static void network({
+    required String method,
+    required String url,
+    int? statusCode,
+    Duration? duration,
+    Map<String, dynamic>? requestHeaders,
+    dynamic requestBody,
+    Map<String, dynamic>? responseHeaders,
+    dynamic responseBody,
+    Object? error,
+    String category = 'HTTP',
+  }) {
+    final context = <String, dynamic>{
+      'method': method,
+      'url': url,
+      if (statusCode != null) 'statusCode': statusCode,
+      if (duration != null) 'durationMs': duration.inMilliseconds,
+      if (requestHeaders != null) 'requestHeaders': requestHeaders,
+      if (requestBody != null) 'requestBody': requestBody,
+      if (responseHeaders != null) 'responseHeaders': responseHeaders,
+      if (responseBody != null) 'responseBody': responseBody,
+      if (error != null) 'error': error.toString(),
+    };
+
+    // Determine log level based on status code
+    if (error != null) {
+      e(category, '$method $url failed', context);
+    } else if (statusCode != null && statusCode >= 400) {
+      w(category, '$method $url → $statusCode', context);
+    } else {
+      i(category, '$method $url → ${statusCode ?? 'pending'}', context);
+    }
+  }
+
+  /// Logs an HTTP request.
+  ///
+  /// Use before making the actual request for detailed request logging.
+  ///
+  /// ```dart
+  /// Logiq.logRequest(LogiqRequest(
+  ///   method: 'POST',
+  ///   url: 'https://api.example.com/users',
+  ///   headers: {'Content-Type': 'application/json'},
+  ///   body: {'name': 'John'},
+  /// ));
+  /// ```
+  static void logRequest(
+    LogiqRequest request, {
+    String category = 'HTTP',
+    LogLevel level = LogLevel.debug,
+  }) {
+    _instance?._log(
+      level,
+      category,
+      '→ ${request.method} ${request.url}',
+      request.toContext(),
+    );
+  }
+
+  /// Logs an HTTP response.
+  ///
+  /// Use after receiving a response for detailed response logging.
+  ///
+  /// ```dart
+  /// Logiq.logResponse(LogiqResponse(
+  ///   statusCode: 200,
+  ///   url: 'https://api.example.com/users',
+  ///   body: {'users': [...]},
+  ///   duration: Duration(milliseconds: 234),
+  /// ));
+  /// ```
+  static void logResponse(
+    LogiqResponse response, {
+    String category = 'HTTP',
+  }) {
+    final level = response.isError ? LogLevel.warning : LogLevel.info;
+    _instance?._log(
+      level,
+      category,
+      '← ${response.statusCode} ${response.url}',
+      response.toContext(),
+    );
   }
 
   // ══════════════════════════════════════════════════════════════════════

@@ -177,20 +177,43 @@ class _HomePageState extends State<HomePage> {
                       color: AppColors.primary,
                       buttons: [
                         _LogItem(
-                            'API Call',
+                            'GET',
                             AppColors.green,
-                            () => _log(() =>
-                                Logiq.i('API', 'GET /users', {'status': 200}))),
+                            () => _log(() => Logiq.network(
+                                  method: 'GET',
+                                  url: 'https://api.example.com/users',
+                                  statusCode: 200,
+                                  duration: const Duration(milliseconds: 234),
+                                  responseBody: {
+                                    'users': [
+                                      {'id': 1, 'name': 'John'},
+                                      {'id': 2, 'name': 'Jane'},
+                                    ],
+                                  },
+                                ))),
                         _LogItem(
-                            'HTTP Error',
+                            'POST',
+                            AppColors.primary,
+                            () => _log(() => Logiq.network(
+                                  method: 'POST',
+                                  url: 'https://api.example.com/users',
+                                  statusCode: 201,
+                                  duration: const Duration(milliseconds: 456),
+                                  requestBody: {
+                                    'name': 'John',
+                                    'email': 'john@example.com'
+                                  },
+                                  responseBody: {'id': 123, 'name': 'John'},
+                                ))),
+                        _LogItem(
+                            'Error',
                             AppColors.red,
-                            () => _log(() => Logiq.e(
-                                'HTTP', 'Request failed', {'status': 500}))),
-                        _LogItem(
-                            'Socket',
-                            AppColors.teal,
-                            () => _log(() => Logiq.d(
-                                'Socket', 'Connected', {'url': 'wss://...'}))),
+                            () => _log(() => Logiq.network(
+                                  method: 'GET',
+                                  url: 'https://api.example.com/users/999',
+                                  statusCode: 404,
+                                  responseBody: {'error': 'User not found'},
+                                ))),
                       ],
                     ),
                     const SizedBox(height: 20),

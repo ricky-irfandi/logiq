@@ -1,3 +1,21 @@
+## 1.0.0-beta.4
+
+* **Navigation Observer** - New `Logiq.navigationObserver` for automatic navigation logging
+  * Logs push, pop, replace, remove events with route names and arguments
+  * Configurable log level, category, and argument logging
+  * Zero-impact fire-and-forget logging
+* **Tree View for Log Details** - Enhanced log detail bottom sheet
+  * Toggle between Tree and JSON views with segmented control
+  * Expandable/collapsible nodes for nested data
+  * Color-coded values (green=strings, cyan=numbers, orange=booleans)
+  * Tree view is now the default
+  * Taller bottom sheet (90% of screen) for better viewing
+* **Network Logging** - Package-agnostic HTTP logging
+  * `Logiq.network()` for quick request/response logging
+  * `LogiqRequest` and `LogiqResponse` classes for typed logging
+  * Auto log level based on status code (info → warning → error)
+  * Works with any HTTP library (Dio, http, etc.)
+
 ## 1.0.0-beta.3
 
 * Added category tabs for debug UI - organize logs into custom tabs by category

@@ -43,7 +43,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  logiq: ^1.0.0-beta.3
+  logiq: ^1.0.0-beta.4
 ```
 
 ### Basic Usage
@@ -457,6 +457,65 @@ MaterialApp(
     ),
   ],
 )
+```
+
+### Network Logging
+
+Log HTTP requests without depending on any HTTP library:
+
+```dart
+// Quick one-liner (in your interceptor)
+Logiq.network(
+  method: 'GET',
+  url: 'https://api.example.com/users',
+  statusCode: 200,
+  duration: Duration(milliseconds: 234),
+);
+
+// Or use typed objects for detailed logging
+Logiq.logRequest(LogiqRequest(method: 'POST', url: '/users', body: {...}));
+Logiq.logResponse(LogiqResponse(statusCode: 201, url: '/users'));
+```
+
+**Example Dio Interceptor:**
+
+```dart
+class LogiqDioInterceptor extends Interceptor {
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    Logiq.logRequest(LogiqRequest(
+      method: options.method,
+      url: options.uri.toString(),
+      headers: options.headers,
+      body: options.data,
+    ));
+    handler.next(options);
+  }
+
+  @override
+  void onResponse(Response response, ResponseInterceptorHandler handler) {
+    Logiq.logResponse(LogiqResponse(
+      statusCode: response.statusCode ?? 0,
+      url: response.requestOptions.uri.toString(),
+      body: response.data,
+      requestMethod: response.requestOptions.method,
+    ));
+    handler.next(response);
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    Logiq.network(
+      method: err.requestOptions.method,
+      url: err.requestOptions.uri.toString(),
+      error: err.message,
+    );
+    handler.next(err);
+  }
+}
+
+// Usage
+final dio = Dio()..interceptors.add(LogiqDioInterceptor());
 ```
 
 ### Context Providers

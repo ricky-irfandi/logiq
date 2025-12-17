@@ -17,6 +17,7 @@ import '../core/logiq.dart';
 import '../format/csv_formatter.dart';
 import '../security/log_encryptor.dart';
 import 'log_viewer_theme.dart';
+import 'network_log_detail_screen.dart';
 
 /// Extension to replace deprecated withOpacity with Color.fromRGBO.
 /// This avoids precision loss and is compatible with older Flutter SDKs.
@@ -26,6 +27,16 @@ extension _ColorOpacity on Color {
     // ignore: deprecated_member_use
     return Color.fromRGBO(red, green, blue, opacity);
   }
+}
+
+/// Extension to detect network logs.
+extension _NetworkLogDetection on LogEntry {
+  /// Returns true if this log entry is a network log.
+  /// Detection is fast - just checks for presence of method and url keys.
+  bool get isNetworkLog =>
+      context != null &&
+      context!.containsKey('method') &&
+      context!.containsKey('url');
 }
 
 /// Apple-inspired log viewer with elegant UI and smooth animations.
@@ -780,6 +791,21 @@ class _LogViewerScreenState extends State<LogViewerScreen>
   void _showLogDetail(LogEntry entry) {
     final theme = _isDarkMode ? widget.theme : LogViewerTheme.light;
     HapticFeedback.mediumImpact();
+
+    // Navigate to dedicated page for network logs
+    if (entry.isNetworkLog) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => NetworkLogDetailScreen(
+            entry: entry,
+            theme: theme,
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Show bottom sheet for regular logs
     showCupertinoModalPopup(
       context: context,
       builder: (context) => _AppleLogDetailSheet(
